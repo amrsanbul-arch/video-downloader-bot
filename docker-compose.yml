@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  video_bot:
+    build: .
+    container_name: video_downloader_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./downloads:/app/downloads
+      - ./logs:/app/logs
+      - ./database:/app/database

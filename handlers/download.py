@@ -1,0 +1,182 @@
+"""
+handlers/download.py
+استقبال الروابط، عرض معلومات الفيديو والأزرار، ثم تنفيذ التحميل الفعلي
+"""
+
+import uuid
+import html
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+
+from config import config
+from database.models import db
+from utils.logger import logger
+from utils.i18n import t
+from utils.validators import is_valid_url, detect_site, extract_first_url
+from utils.helpers import rate_limiter, format_size, format_duration
+from services.downloader import get_video_info, download_video, cleanup_file
+from services.audio import download_audio
+from services.thumbnail import download_thumbnail
+
+# تخزين مؤقت في الذاكرة: يربط معرف قصير برابط الفيديو الكامل
+# (لأن callback_data محدود بـ 64 بايت في تليجرام)
+_pending_urls: dict[str, str] = {}
+
+
+async def get_lang(user_id: int) -> str:
+    return await db.get_user_language(user_id)
+
+
+def _build_caption(info: dict) -> str:
+    title = html.escape(info["title"])
+    duration = format_duration(info["duration"])
+    size = format_size(info["filesize"])
+    return (
+        f"🎬 <b>{title}</b>\n\n"
+        f"⏱ المدة: {duration}\n"
+        f"📦 الحجم التقريبي: {size}\n"
+        f"🌐 المصدر: {info['extractor']}\n\n"
+        f"اختر طريقة التحميل:"
+    )
+
+
+def _build_keyboard(short_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("🎥 فيديو عالي الجودة", callback_data=f"dl_high_{short_id}")],
+            [InlineKeyboardButton("📱 فيديو متوسط الجودة", callback_data=f"dl_medium_{short_id}")],
+            [InlineKeyboardButton("🎵 صوت MP3", callback_data=f"dl_audio_{short_id}")],
+            [InlineKeyboardButton("🖼 صورة مصغرة", callback_data=f"dl_thumb_{short_id}")],
+            [InlineKeyboardButton("❌ إلغاء", callback_data=f"dl_cancel_{short_id}")],
+        ]
+    )
+
+
+async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """استقبال الرسائل النصية، استخراج الرابط، وعرض معلومات الفيديو"""
+    user = update.effective_user
+    await db.add_or_update_user(user.id, user.username or "", user.first_name or "")
+
+    if await db.is_banned(user.id):
+        lang = await get_lang(user.id)
+        await update.message.reply_text(t("banned", lang))
+        return
+
+    lang = await get_lang(user.id)
+
+    if not rate_limiter.is_allowed(user.id):
+        await update.message.reply_text(t("rate_limited", lang))
+        return
+
+    text = update.message.text or ""
+    url = extract_first_url(text)
+
+    if not url or not is_valid_url(url):
+        await update.message.reply_text(t("invalid_url", lang))
+        return
+
+    status_msg = await update.message.reply_text(t("analyzing", lang))
+
+    try:
+        info = await get_video_info(url)
+    except Exception as e:
+        logger.error(f"فشل تحليل الرابط {url}: {e}")
+        await status_msg.edit_text("❌ تعذر تحليل هذا الرابط. تأكد إن الموقع مدعوم.")
+        return
+
+    short_id = uuid.uuid4().hex[:8]
+    _pending_urls[short_id] = url
+
+    site = detect_site(url)
+    await db.log_download(user.id, url, site, "analyzed", "pending")
+
+    caption = _build_caption(info)
+    keyboard = _build_keyboard(short_id)
+    await status_msg.edit_text(caption, parse_mode="HTML", reply_markup=keyboard)
+
+
+async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """التعامل مع ضغط المستخدم على أحد أزرار التحميل"""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    lang = await get_lang(user_id)
+
+    data = query.data  # شكلها: dl_<action>_<short_id>
+    parts = data.split("_", 2)
+    if len(parts) != 3:
+        return
+
+    _, action, short_id = parts
+    url = _pending_urls.get(short_id)
+
+    if action == "cancel":
+        _pending_urls.pop(short_id, None)
+        await query.edit_message_text("❌ تم الإلغاء.")
+        return
+
+    if not url:
+        await query.edit_message_text("⚠️ انتهت صلاحية هذا الطلب، ابعت الرابط تاني.")
+        return
+
+    await query.edit_message_caption(caption="⏳ جاري التحميل... قد يستغرق ذلك بعض الوقت.") \
+        if query.message.caption else await query.edit_message_text("⏳ جاري التحميل... قد يستغرق ذلك بعض الوقت.")
+
+    file_path = None
+    try:
+        if action == "high":
+            file_path = await download_video(url, quality="high")
+            await _send_with_size_check(query, context, file_path, is_video=True)
+
+        elif action == "medium":
+            file_path = await download_video(url, quality="medium")
+            await _send_with_size_check(query, context, file_path, is_video=True)
+
+        elif action == "audio":
+            file_path = await download_audio(url)
+            await _send_with_size_check(query, context, file_path, is_video=False)
+
+        elif action == "thumb":
+            info = await get_video_info(url)
+            file_path = await download_thumbnail(info.get("thumbnail"))
+            with open(file_path, "rb") as f:
+                await context.bot.send_photo(chat_id=query.message.chat_id, photo=f)
+
+        site = detect_site(url)
+        await db.log_download(user_id, url, site, action, "success")
+        _pending_urls.pop(short_id, None)
+
+    except Exception as e:
+        logger.error(f"فشل تنفيذ التحميل ({action}) للرابط {url}: {e}")
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="❌ حصل خطأ أثناء التحميل. حاول تاني أو جرب رابط مختلف.",
+        )
+        site = detect_site(url)
+        await db.log_download(user_id, url, site, action, "failed")
+
+    finally:
+        if file_path:
+            cleanup_file(file_path)
+
+
+async def _send_with_size_check(query, context, file_path: str, is_video: bool):
+    """إرسال الملف للمستخدم بعد التأكد إنه ضمن الحد المسموح به"""
+    import os
+
+    size_mb = os.path.getsize(file_path) / (1024 * 1024)
+    if size_mb > config.MAX_FILE_SIZE_MB:
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=f"⚠️ حجم الملف ({size_mb:.0f}MB) أكبر من الحد المسموح ({config.MAX_FILE_SIZE_MB}MB).",
+        )
+        return
+
+    with open(file_path, "rb") as f:
+        if is_video:
+            await context.bot.send_video(
+                chat_id=query.message.chat_id, video=f, supports_streaming=True
+            )
+        else:
+            await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
