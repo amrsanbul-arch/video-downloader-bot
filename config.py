@@ -29,6 +29,13 @@ class Config:
     # ===== قاعدة البيانات =====
     DATABASE_PATH: str = os.getenv("DATABASE_PATH", "database/bot.db")
 
+    # ===== Cookies (لمواقع تطلب تسجيل دخول مثل Reddit/Instagram/TikTok أحيانًا) =====
+    COOKIES_FILE: str = os.getenv("COOKIES_FILE", "")
+
+    # ===== Force Subscribe (اختياري) =====
+    # ضع اسم القناة بدون @ (مثل: channel_name)
+    FORCE_SUBSCRIBE_CHANNEL: str = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "")
+
     # ===== اللغة =====
     DEFAULT_LANGUAGE: str = os.getenv("DEFAULT_LANGUAGE", "ar")
 

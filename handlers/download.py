@@ -1,10 +1,11 @@
 """
 handlers/download.py
-استقبال الروابط، عرض معلومات الفيديو والأزرار، ثم تنفيذ التحميل الفعلي
+استقبال الروابط، عرض معلومات الفيديو، اختيار جودة دقيقة، وتحميل محسّن مع شريط تقدم
 """
 
 import uuid
 import html
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
@@ -14,13 +15,19 @@ from utils.logger import logger
 from utils.i18n import t
 from utils.validators import is_valid_url, detect_site, extract_first_url
 from utils.helpers import rate_limiter, format_size, format_duration
-from services.downloader import get_video_info, download_video, cleanup_file
+from services.downloader import (
+    get_video_info,
+    download_video,
+    get_available_formats,
+    cleanup_file,
+)
 from services.audio import download_audio
 from services.thumbnail import download_thumbnail
 
-# تخزين مؤقت في الذاكرة: يربط معرف قصير برابط الفيديو الكامل
-# (لأن callback_data محدود بـ 64 بايت في تليجرام)
+# تخزين مؤقت: يربط معرف قصير برابط الفيديو الكامل
 _pending_urls: dict[str, str] = {}
+# تخزين الفيديوهات المحملة مؤخراً (للكاش)
+_downloaded_cache: dict[str, str] = {}
 
 
 async def get_lang(user_id: int) -> str:
@@ -40,11 +47,14 @@ def _build_caption(info: dict) -> str:
     )
 
 
-def _build_keyboard(short_id: str) -> InlineKeyboardMarkup:
+def _build_quality_keyboard(short_id: str) -> InlineKeyboardMarkup:
+    """بناء لوحة مفاتيح الجودات المتاحة"""
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("🎥 فيديو عالي الجودة", callback_data=f"dl_high_{short_id}")],
-            [InlineKeyboardButton("📱 فيديو متوسط الجودة", callback_data=f"dl_medium_{short_id}")],
+            [InlineKeyboardButton("🎥 2160p (4K)", callback_data=f"dlq_2160_{short_id}")],
+            [InlineKeyboardButton("🎬 1080p (Full HD)", callback_data=f"dlq_1080_{short_id}")],
+            [InlineKeyboardButton("📱 720p (HD)", callback_data=f"dlq_720_{short_id}")],
+            [InlineKeyboardButton("📞 480p (Mobile)", callback_data=f"dlq_480_{short_id}")],
             [InlineKeyboardButton("🎵 صوت MP3", callback_data=f"dl_audio_{short_id}")],
             [InlineKeyboardButton("🖼 صورة مصغرة", callback_data=f"dl_thumb_{short_id}")],
             [InlineKeyboardButton("❌ إلغاء", callback_data=f"dl_cancel_{short_id}")],
@@ -81,7 +91,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         info = await get_video_info(url)
     except Exception as e:
         logger.error(f"فشل تحليل الرابط {url}: {e}")
-        await status_msg.edit_text("❌ تعذر تحليل هذا الرابط. تأكد إن الموقع مدعوم.")
+        err_text = str(e).lower()
+        if "login" in err_text or "authentication" in err_text or "cookies" in err_text:
+            await status_msg.edit_text(
+                "🔒 هذا الفيديو يحتاج تسجيل دخول (الموقع طلب Cookies). "
+                "لازم تضيف ملف كوكيز في إعدادات البوت لتحميل هذا النوع من الروابط."
+            )
+        else:
+            await status_msg.edit_text("❌ تعذر تحليل هذا الرابط. تأكد إن الموقع مدعوم.")
         return
 
     short_id = uuid.uuid4().hex[:8]
@@ -91,7 +108,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await db.log_download(user.id, url, site, "analyzed", "pending")
 
     caption = _build_caption(info)
-    keyboard = _build_keyboard(short_id)
+    keyboard = _build_quality_keyboard(short_id)
     await status_msg.edit_text(caption, parse_mode="HTML", reply_markup=keyboard)
 
 
@@ -103,12 +120,12 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = query.from_user.id
     lang = await get_lang(user_id)
 
-    data = query.data  # شكلها: dl_<action>_<short_id>
+    data = query.data
     parts = data.split("_", 2)
-    if len(parts) != 3:
+    if len(parts) < 3:
         return
 
-    _, action, short_id = parts
+    prefix, action, short_id = parts[0], parts[1], parts[2]
     url = _pending_urls.get(short_id)
 
     if action == "cancel":
@@ -120,35 +137,35 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("⚠️ انتهت صلاحية هذا الطلب، ابعت الرابط تاني.")
         return
 
-    await query.edit_message_caption(caption="⏳ جاري التحميل... قد يستغرق ذلك بعض الوقت.") \
-        if query.message.caption else await query.edit_message_text("⏳ جاري التحميل... قد يستغرق ذلك بعض الوقت.")
+    await query.edit_message_caption(caption="⏳ جاري التحميل...\n\n[░░░░░░░░░░] 0%")
 
     file_path = None
     try:
-        if action == "high":
-            file_path = await download_video(url, quality="high")
+        # تحديد نوع الملف المطلوب
+        if action in ["2160", "1080", "720", "480"]:  # جودة محددة
+            height = int(action)
+            file_path = await download_video(url, quality="custom", height=height)
             await _send_with_size_check(query, context, file_path, is_video=True)
-
-        elif action == "medium":
-            file_path = await download_video(url, quality="medium")
-            await _send_with_size_check(query, context, file_path, is_video=True)
+            format_name = f"{action}p"
 
         elif action == "audio":
             file_path = await download_audio(url)
             await _send_with_size_check(query, context, file_path, is_video=False)
+            format_name = "MP3"
 
         elif action == "thumb":
             info = await get_video_info(url)
             file_path = await download_thumbnail(info.get("thumbnail"))
             with open(file_path, "rb") as f:
                 await context.bot.send_photo(chat_id=query.message.chat_id, photo=f)
+            format_name = "Thumbnail"
 
         site = detect_site(url)
-        await db.log_download(user_id, url, site, action, "success")
+        await db.log_download(user_id, url, site, format_name, "success")
         _pending_urls.pop(short_id, None)
 
     except Exception as e:
-        logger.error(f"فشل تنفيذ التحميل ({action}) للرابط {url}: {e}")
+        logger.error(f"فشل تنفيذ التحميل للرابط {url}: {e}")
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text="❌ حصل خطأ أثناء التحميل. حاول تاني أو جرب رابط مختلف.",

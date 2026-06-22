@@ -1,6 +1,10 @@
 """
 bot.py
-نقطة الدخول الرئيسية للبوت - تجميع كل الـ handlers وتشغيل البوت
+نقطة الدخول الرئيسية للبوت - مع كل الميزات المحدثة:
+- لوحة إدارة كاملة
+- اختيار جودة دقيقة
+- Force Subscribe
+- شريط تقدم
 """
 
 from telegram import Update
@@ -18,6 +22,7 @@ from database.models import db
 from utils.logger import logger
 
 from handlers import start, help as help_handler, settings, admin, download
+from handlers import admin_dashboard, force_subscribe
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -58,7 +63,7 @@ def main():
     app.add_handler(CommandHandler("settings", settings.cmd_settings))
     app.add_handler(CommandHandler("stats", settings.cmd_stats))
 
-    # ===== أوامر الإدارة =====
+    # ===== أوامر الإدارة (القديمة) =====
     app.add_handler(CommandHandler("users", admin.cmd_users))
     app.add_handler(CommandHandler("botstats", admin.cmd_botstats))
     app.add_handler(CommandHandler("ban", admin.cmd_ban))
@@ -68,9 +73,31 @@ def main():
     app.add_handler(CommandHandler("restart", admin.cmd_restart))
     app.add_handler(CommandHandler("update", admin.cmd_update))
 
+    # ===== لوحة الإدارة الجديدة =====
+    app.add_handler(CommandHandler("admin", admin_dashboard.cmd_admin))
+    app.add_handler(
+        CallbackQueryHandler(
+            admin_dashboard.on_admin_callback, pattern="^admin_"
+        )
+    )
+    # معالج النصوص من لوحة الإدارة (برودكاست، حظر، إلخ)
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            admin_dashboard.on_admin_text_input,
+        )
+    )
+
     # ===== التحميل (روابط + أزرار) =====
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download.on_message))
-    app.add_handler(CallbackQueryHandler(download.on_download_callback, pattern="^dl_"))
+    # التحقق من Force Subscribe قبل معالجة الرابط
+    async def on_message_with_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await force_subscribe.check_subscription(update, context):
+            await force_subscribe.send_subscribe_message(update, context)
+            return
+        await download.on_message(update, context)
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_message_with_check))
+    app.add_handler(CallbackQueryHandler(download.on_download_callback, pattern="^dl"))
 
     # ===== معالجة الأخطاء =====
     app.add_error_handler(on_error)

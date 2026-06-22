@@ -29,6 +29,8 @@ def _download_audio_sync(url: str, out_template: str) -> None:
             }
         ],
     }
+    if config.COOKIES_FILE:
+        opts["cookiefile"] = config.COOKIES_FILE
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.download([url])
 
