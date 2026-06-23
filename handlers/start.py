@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from config import config
 from database.models import db
 from utils.i18n import t
+from handlers.menu import build_main_menu
 
 
 async def get_lang(user_id: int) -> str:
@@ -36,7 +37,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     lang = await get_lang(update.effective_user.id)
     name = update.effective_user.first_name or ""
-    await update.message.reply_text(t("start", lang, name=name))
+    await update.message.reply_text(
+        t("start", lang, name=name), reply_markup=build_main_menu(lang)
+    )
 
 
 async def cmd_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -76,3 +79,8 @@ async def on_lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_lang = query.data.replace("setlang_", "")
     await db.set_user_language(query.from_user.id, new_lang)
     await query.edit_message_text(t("lang_changed", new_lang))
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="🔄",
+        reply_markup=build_main_menu(new_lang),
+    )
