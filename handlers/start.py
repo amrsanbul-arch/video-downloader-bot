@@ -37,8 +37,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     lang = await get_lang(update.effective_user.id)
     name = update.effective_user.first_name or ""
+    is_admin = await db.is_admin(update.effective_user.id)
     await update.message.reply_text(
-        t("start", lang, name=name), reply_markup=build_main_menu(lang)
+        t("start", lang, name=name), reply_markup=build_main_menu(lang, is_admin)
     )
 
 
@@ -79,8 +80,10 @@ async def on_lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     new_lang = query.data.replace("setlang_", "")
     await db.set_user_language(query.from_user.id, new_lang)
     await query.edit_message_text(t("lang_changed", new_lang))
+    is_admin = await db.is_admin(query.from_user.id)
     await context.bot.send_message(
         chat_id=query.message.chat_id,
         text="🔄",
-        reply_markup=build_main_menu(new_lang),
+        reply_markup=build_main_menu(new_lang, is_admin),
     )
+

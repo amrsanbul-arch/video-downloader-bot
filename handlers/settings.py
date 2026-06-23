@@ -17,7 +17,7 @@ async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(t("banned", lang))
         return
     lang = await db.get_user_language(user_id)
-    await update.message.reply_text(t("settings", lang, lang=lang))
+    await update.message.reply_text(t("settings", lang, current_lang=lang))
 
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -29,3 +29,4 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = await db.get_user_language(user_id)
     downloads_count = await db.count_user_downloads(user_id)
     await update.message.reply_text(t("stats_user", lang, downloads=downloads_count))
+

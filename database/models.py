@@ -17,6 +17,17 @@ class Database:
         self._conn = await aiosqlite.connect(self.path)
         await self._conn.execute("PRAGMA journal_mode=WAL;")
         await self.create_tables()
+        await self._migrate()
+
+    async def _migrate(self):
+        """إضافة أعمدة جديدة لو لسه مش موجودة (ميجريشن بسيط وآمن)"""
+        try:
+            await self._conn.execute(
+                "ALTER TABLE users ADD COLUMN default_quality TEXT DEFAULT '1080'"
+            )
+            await self._conn.commit()
+        except Exception:
+            pass  # العمود موجود بالفعل
 
     async def close(self):
         if self._conn:
@@ -132,6 +143,46 @@ class Database:
         row = await cursor.fetchone()
         return row[0] if row else 0
 
+    async def get_recent_downloads(self, user_id: int, limit: int = 5):
+        """جلب آخر التحميلات الناجحة للمستخدم"""
+        cursor = await self._conn.execute(
+            """
+            SELECT url, site, format, created_at FROM downloads
+            WHERE user_id = ? AND status = 'success'
+            ORDER BY created_at DESC LIMIT ?
+            """,
+            (user_id, limit),
+        )
+        return await cursor.fetchall()
+
+    async def get_recent_downloads(self, user_id: int, limit: int = 5):
+        """آخر تحميلات المستخدم (الأحدث أولًا)"""
+        cursor = await self._conn.execute(
+            """
+            SELECT url, site, format, status, created_at
+            FROM downloads
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        )
+        return await cursor.fetchall()
+
+    async def set_default_quality(self, user_id: int, quality: str):
+        await self._conn.execute(
+            "UPDATE users SET default_quality = ? WHERE user_id = ?",
+            (quality, user_id),
+        )
+        await self._conn.commit()
+
+    async def get_default_quality(self, user_id: int) -> str:
+        cursor = await self._conn.execute(
+            "SELECT default_quality FROM users WHERE user_id = ?", (user_id,)
+        )
+        row = await cursor.fetchone()
+        return row[0] if row and row[0] else "1080"
+
     # ===================== الحظر =====================
 
     async def ban_user(self, user_id: int, reason: str = ""):
@@ -198,3 +249,4 @@ class Database:
 
 # نسخة واحدة مشتركة تُستخدم في كل المشروع
 db = Database()
+

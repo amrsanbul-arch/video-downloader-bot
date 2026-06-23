@@ -3,7 +3,7 @@
   "help": "📖 Commands list:\n\n/start - Start the bot\n/help - Show this menu\n/about - About this bot\n/settings - Settings\n/stats - Your stats\n/lang - Change language\n/ping - Check bot response time\n\n📥 To download a video: just send the link in chat.",
   "about": "ℹ️ Professional video downloader bot\n\nSupports: {sites}\n\nBuilt with Python + yt-dlp + python-telegram-bot",
   "ping": "🏓 Pong!\nResponse time: {ms} ms",
-  "settings": "⚙️ Settings\n\nCurrent language: {lang}\nTo change language use /lang",
+  "settings": "⚙️ Settings\n\nCurrent language: {current_lang}\nTo change language use /lang",
   "stats_user": "📊 Your stats:\n\nDownloads: {downloads}",
   "lang_choose": "🌐 Choose your language:",
   "lang_changed": "✅ Language changed to English",
@@ -13,3 +13,4 @@
   "analyzing": "🔍 Analyzing the link... please wait.",
   "coming_soon": "🚧 Download feature is under development and will be enabled in the next project phase."
 }
+
