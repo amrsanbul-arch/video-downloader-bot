@@ -1,3 +1,95 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# fix_bugs.sh
+# سكريبت يطبق إصلاحات الأخطاء الثلاثة تلقائيًا على مشروع video_bot
+
+set -e
+
+echo "🔧 بدء تطبيق الإصلاحات..."
+
+# ===== إصلاح 1: bot.py =====
+cat > bot.py << 'EOF'
+"""
+bot.py - النسخة 2.1 (مصححة)
+"""
+from telegram import Update
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, CallbackQueryHandler,
+    ContextTypes, filters,
+)
+from config import config
+from database.models import db
+from utils.logger import logger
+from handlers import start, help as help_handler, settings, admin, download
+from handlers import admin_dashboard, force_subscribe
+
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"حدث خطأ غير متوقع: {context.error}", exc_info=context.error)
+
+async def post_init(application: Application):
+    await db.connect()
+    logger.info("✅ تم الاتصال بقاعدة البيانات بنجاح")
+
+async def post_shutdown(application: Application):
+    await db.close()
+    logger.info("🔌 تم إغلاق الاتصال بقاعدة البيانات")
+
+def main():
+    config.validate()
+    logger.info("🚀 بدء تشغيل البوت...")
+
+    app = (
+        Application.builder()
+        .token(config.BOT_TOKEN)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
+
+    app.add_handler(CommandHandler("start", start.cmd_start))
+    app.add_handler(CommandHandler("about", start.cmd_about))
+    app.add_handler(CommandHandler("ping", start.cmd_ping))
+    app.add_handler(CommandHandler("lang", start.cmd_lang))
+    app.add_handler(CallbackQueryHandler(start.on_lang_callback, pattern="^setlang_"))
+    app.add_handler(CommandHandler("help", help_handler.cmd_help))
+    app.add_handler(CommandHandler("settings", settings.cmd_settings))
+    app.add_handler(CommandHandler("stats", settings.cmd_stats))
+
+    app.add_handler(CommandHandler("users", admin.cmd_users))
+    app.add_handler(CommandHandler("botstats", admin.cmd_botstats))
+    app.add_handler(CommandHandler("ban", admin.cmd_ban))
+    app.add_handler(CommandHandler("unban", admin.cmd_unban))
+    app.add_handler(CommandHandler("broadcast", admin.cmd_broadcast))
+    app.add_handler(CommandHandler("logs", admin.cmd_logs))
+    app.add_handler(CommandHandler("restart", admin.cmd_restart))
+    app.add_handler(CommandHandler("update", admin.cmd_update))
+
+    app.add_handler(CommandHandler("admin", admin_dashboard.cmd_admin))
+    app.add_handler(CallbackQueryHandler(admin_dashboard.on_admin_callback, pattern="^admin_"))
+
+    async def on_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        pending_action = context.user_data.get("admin_action")
+        if pending_action and await admin_dashboard.is_admin_check(update):
+            await admin_dashboard.on_admin_text_input(update, context)
+            return
+        if not await force_subscribe.check_subscription(update, context):
+            await force_subscribe.send_subscribe_message(update, context)
+            return
+        await download.on_message(update, context)
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_message))
+    app.add_handler(CallbackQueryHandler(download.on_download_callback, pattern="^dl"))
+
+    app.add_error_handler(on_error)
+    logger.info("✅ البوت شغال دلوقتي...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
+EOF
+echo "✅ تم إصلاح bot.py"
+
+# ===== إصلاح 2: handlers/download.py =====
+cat > handlers/download.py << 'PYEOF'
 """
 handlers/download.py
 استقبال الروابط، عرض معلومات الفيديو، اختيار جودة دقيقة، وتحميل محسّن
@@ -182,3 +274,69 @@ async def _send_with_size_check(query, context, file_path: str, is_video: bool):
             await context.bot.send_video(chat_id=query.message.chat_id, video=f, supports_streaming=True)
         else:
             await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
+PYEOF
+echo "✅ تم إصلاح handlers/download.py"
+
+# ===== إصلاح 3: handlers/force_subscribe.py =====
+cat > handlers/force_subscribe.py << 'EOF'
+"""
+handlers/force_subscribe.py
+نظام Force Subscribe
+"""
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from telegram.error import TelegramError
+
+from config import config
+from utils.logger import logger
+
+
+async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    channel = getattr(config, "FORCE_SUBSCRIBE_CHANNEL", None)
+    if not channel:
+        return True
+
+    user_id = update.effective_user.id
+    chat_id = channel if channel.startswith("@") else f"@{channel}"
+
+    try:
+        member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
+        if member.status in ["member", "administrator", "creator"]:
+            return True
+    except TelegramError:
+        logger.warning(f"فشل التحقق من اشتراك المستخدم {user_id} في القناة {channel}")
+    except Exception as e:
+        logger.error(f"خطأ في check_subscription: {e}")
+
+    return False
+
+
+async def send_subscribe_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    channel = getattr(config, "FORCE_SUBSCRIBE_CHANNEL", None)
+    if not channel:
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("✅ اشترك في القناة", url=f"https://t.me/{channel}")]]
+    )
+
+    await update.message.reply_text(
+        "🔒 لازم تكون مشترك في القناة قبل ما تحمّل!\n\nاشترك في القناة وحاول تاني.",
+        reply_markup=keyboard,
+    )
+EOF
+echo "✅ تم إصلاح handlers/force_subscribe.py"
+
+# ===== فحص الصياغة =====
+echo "🔍 فحص الأكواد..."
+python -m py_compile bot.py handlers/download.py handlers/force_subscribe.py
+
+echo ""
+echo "✅✅✅ تم تطبيق كل الإصلاحات بنجاح! ✅✅✅"
+echo ""
+echo "الخطوة الجاية:"
+echo "  git add ."
+echo "  git commit -m 'Fix critical bugs'"
+echo "  git push"
+echo "  python bot.py"
