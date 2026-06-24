@@ -1,3 +1,10 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# stability_and_autostart.sh
+set -e
+echo "🔧 تطبيق تحسينات الاستقرار والتشغيل التلقائي..."
+
+mkdir -p $(dirname 'bot.py')
+cat > 'bot.py' << 'ZEOF_MARKER_UNIQUE'
 """
 bot.py - النسخة 2.3
 - لوحة إدارة كاملة
@@ -155,3 +162,66 @@ async def _forward_support_message(update: Update, context: ContextTypes.DEFAULT
 if __name__ == "__main__":
     main()
 
+ZEOF_MARKER_UNIQUE
+chmod +x 'bot.py'
+echo "✅ تم تحديث bot.py"
+
+mkdir -p $(dirname 'run.sh')
+cat > 'run.sh' << 'ZEOF_MARKER_UNIQUE'
+#!/data/data/com.termux/files/usr/bin/bash
+# run.sh
+# يشغّل البوت، ولو كرّش لأي سبب يعيد تشغيله تلقائيًا بعد 5 ثواني
+# يفضل يحاول طول ما إنت ضاغط Ctrl+C يدوي بس
+
+cd "$(dirname "$0")"
+
+# يمنع Android يوقف Termux في الخلفية (يحتاج إذن "Disable battery optimization" كمان)
+termux-wake-lock 2>/dev/null
+
+echo "🚀 بدء حلقة التشغيل الدائم للبوت..."
+echo "(لإيقاف البوت نهائيًا: اضغط Ctrl+C مرتين بسرعة)"
+echo ""
+
+while true; do
+    python bot.py
+    EXIT_CODE=$?
+    echo ""
+    echo "⚠️ البوت توقف (exit code: $EXIT_CODE). إعادة التشغيل بعد 5 ثواني..."
+    sleep 5
+done
+
+ZEOF_MARKER_UNIQUE
+chmod +x 'run.sh'
+echo "✅ تم تحديث run.sh"
+
+mkdir -p $(dirname 'boot_start_video_bot.sh')
+cat > 'boot_start_video_bot.sh' << 'ZEOF_MARKER_UNIQUE'
+#!/data/data/com.termux/files/usr/bin/bash
+# ~/.termux/boot/start_video_bot.sh
+# يشتغل تلقائيًا لما الموبايل يولع (يحتاج تطبيق Termux:Boot مثبّت)
+
+termux-wake-lock
+
+# عدّل المسار ده لو مجلد البوت بتاعك في مكان مختلف
+BOT_DIR="$HOME/storage/downloads/video_bot"
+
+cd "$BOT_DIR" || exit 1
+
+# يشغّل البوت جوه جلسة tmux اسمها videobot عشان تقدر توصله بعدين
+tmux kill-session -t videobot 2>/dev/null
+tmux new-session -d -s videobot "bash run.sh"
+
+ZEOF_MARKER_UNIQUE
+chmod +x 'boot_start_video_bot.sh'
+echo "✅ تم تحديث boot_start_video_bot.sh"
+
+echo "🔍 فحص bot.py..."
+python -m py_compile bot.py
+echo ""
+echo "✅ تم بنجاح! الخطوات الجاية:"
+echo "1. pkg install termux-api -y   (لو لسه مركبتوش)"
+echo "2. ثبّت تطبيق Termux:API و Termux:Boot من F-Droid"
+echo "3. mkdir -p ~/.termux/boot"
+echo "4. cp boot_start_video_bot.sh ~/.termux/boot/"
+echo "5. git add . && git commit -m \"Stability + autostart\" && git push"
+echo "6. شغل البوت دلوقتي بـ: bash run.sh"
