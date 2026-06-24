@@ -43,7 +43,7 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """إلغاء أي عملية معلّقة (دعم/برودكاست/حظر)"""
     context.user_data.pop("support_action", None)
     context.user_data.pop("admin_action", None)
-    await update.message.reply_text("✅ تم الإلغاء.")
+    await update.message.reply_text("✅ <b>تم الإلغاء.</b>", parse_mode="HTML")
 
 
 def main():
@@ -146,10 +146,14 @@ async def _forward_support_message(update: Update, context: ContextTypes.DEFAULT
                 f"الرسالة:\n{text}"
             ),
         )
-        await update.message.reply_text("✅ تم إرسال رسالتك للدعم، هيتم الرد عليك قريبًا.")
+        await update.message.reply_text(
+            "✅ <b>تم إرسال رسالتك للدعم.</b>\n\nهيتم الرد عليك قريبًا.", parse_mode="HTML"
+        )
     except Exception as e:
         logger.error(f"فشل تحويل رسالة الدعم: {e}")
-        await update.message.reply_text("❌ حصل خطأ أثناء إرسال رسالتك، حاول تاني.")
+        await update.message.reply_text(
+            "❌ <b>حصل خطأ أثناء إرسال رسالتك.</b>\n\nحاول تاني.", parse_mode="HTML"
+        )
 
 
 if __name__ == "__main__":

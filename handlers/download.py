@@ -106,23 +106,23 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if await db.is_banned(user.id):
         lang = await get_lang(user.id)
-        await update.message.reply_text(t("banned", lang))
+        await update.message.reply_text(t("banned", lang), parse_mode="HTML")
         return
 
     lang = await get_lang(user.id)
 
     if not rate_limiter.is_allowed(user.id):
-        await update.message.reply_text(t("rate_limited", lang))
+        await update.message.reply_text(t("rate_limited", lang), parse_mode="HTML")
         return
 
     text = update.message.text or ""
     url = extract_first_url(text)
 
     if not url or not is_valid_url(url):
-        await update.message.reply_text(t("invalid_url", lang))
+        await update.message.reply_text(t("invalid_url", lang), parse_mode="HTML")
         return
 
-    status_msg = await update.message.reply_text("🔍 جاري التحليل...")
+    status_msg = await update.message.reply_text("🔍 <b>جاري التحليل...</b>", parse_mode="HTML")
 
     try:
         info = await get_video_info(url)
@@ -132,10 +132,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         err_text = str(e).lower()
         if "login" in err_text or "authentication" in err_text or "cookies" in err_text:
             await status_msg.edit_text(
-                "🔒 هذا الفيديو يحتاج تسجيل دخول (الموقع طلب Cookies)."
+                "🔒 <b>هذا الفيديو يحتاج تسجيل دخول</b>\n\nالموقع طلب Cookies.",
+                parse_mode="HTML",
             )
         else:
-            await status_msg.edit_text("❌ تعذر تحليل هذا الرابط. تأكد إن الموقع مدعوم.")
+            await status_msg.edit_text(
+                "❌ <b>تعذر تحليل هذا الرابط</b>\n\nتأكد إن الموقع مدعوم.",
+                parse_mode="HTML",
+            )
         return
 
     short_id = uuid.uuid4().hex[:8]
@@ -166,15 +170,20 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if action == "cancel":
         _pending_urls.pop(short_id, None)
-        await query.edit_message_text("❌ تم الإلغاء.")
+        await query.edit_message_text("❌ <b>تم الإلغاء.</b>", parse_mode="HTML")
         return
 
     if not url:
-        await query.edit_message_text("⚠️ انتهت صلاحية هذا الطلب، ابعت الرابط تاني.")
+        await query.edit_message_text(
+            "⚠️ <b>انتهت صلاحية هذا الطلب</b>\n\nابعت الرابط تاني.", parse_mode="HTML"
+        )
         return
 
     try:
-        await query.edit_message_text("✅ تم استلام طلبك.\n\nسأرسل الملف فور الانتهاء.")
+        await query.edit_message_text(
+            "✅ <b>تم استلام طلبك.</b>\n\nسأرسل الملف فور الانتهاء.",
+            parse_mode="HTML",
+        )
     except Exception:
         pass
 
@@ -213,7 +222,8 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         logger.error(f"فشل تنفيذ التحميل للرابط {url}: {e}")
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text="❌ حصل خطأ أثناء التحميل. حاول تاني أو جرب رابط مختلف.",
+            text="❌ <b>حصل خطأ أثناء التحميل</b>\n\nحاول تاني أو جرب رابط مختلف.",
+            parse_mode="HTML",
         )
         site = detect_site(url)
         await db.log_download(user_id, url, site, action, "failed")
@@ -230,7 +240,12 @@ async def _send_with_size_check(query, context, file_path: str, is_video: bool):
     if size_mb > config.MAX_FILE_SIZE_MB:
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=f"⚠️ حجم الملف ({size_mb:.0f}MB) أكبر من الحد المسموح ({config.MAX_FILE_SIZE_MB}MB).",
+            text=(
+                f"⚠️ <b>حجم الملف كبير جدًا</b>\n\n"
+                f"• الحجم: {size_mb:.0f}MB\n"
+                f"• الحد المسموح: {config.MAX_FILE_SIZE_MB}MB"
+            ),
+            parse_mode="HTML",
         )
         return
 

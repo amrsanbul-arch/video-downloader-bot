@@ -26,7 +26,7 @@ async def check_banned(update: Update) -> bool:
     user_id = update.effective_user.id
     if await db.is_banned(user_id):
         lang = await get_lang(user_id)
-        await update.message.reply_text(t("banned", lang))
+        await update.message.reply_text(t("banned", lang), parse_mode="HTML")
         return True
     return False
 
@@ -39,7 +39,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.effective_user.first_name or ""
     is_admin = await db.is_admin(update.effective_user.id)
     await update.message.reply_text(
-        t("start", lang, name=name), reply_markup=build_main_menu(lang, is_admin)
+        t("start", lang, name=name),
+        parse_mode="HTML",
+        reply_markup=build_main_menu(lang, is_admin),
     )
 
 
@@ -48,7 +50,7 @@ async def cmd_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     lang = await get_lang(update.effective_user.id)
     sites = "، ".join(config.SUPPORTED_SITES)
-    await update.message.reply_text(t("about", lang, sites=sites))
+    await update.message.reply_text(t("about", lang, sites=sites), parse_mode="HTML")
 
 
 async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,7 +58,7 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = await get_lang(update.effective_user.id)
     msg = await update.message.reply_text("🏓 ...")
     elapsed_ms = int((time.monotonic() - start) * 1000)
-    await msg.edit_text(t("ping", lang, ms=elapsed_ms))
+    await msg.edit_text(t("ping", lang, ms=elapsed_ms), parse_mode="HTML")
 
 
 async def cmd_lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -71,7 +73,9 @@ async def cmd_lang(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         ]
     )
-    await update.message.reply_text(t("lang_choose", lang), reply_markup=keyboard)
+    await update.message.reply_text(
+        t("lang_choose", lang), parse_mode="HTML", reply_markup=keyboard
+    )
 
 
 async def on_lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,7 +83,7 @@ async def on_lang_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     new_lang = query.data.replace("setlang_", "")
     await db.set_user_language(query.from_user.id, new_lang)
-    await query.edit_message_text(t("lang_changed", new_lang))
+    await query.edit_message_text(t("lang_changed", new_lang), parse_mode="HTML")
     is_admin = await db.is_admin(query.from_user.id)
     await context.bot.send_message(
         chat_id=query.message.chat_id,

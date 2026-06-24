@@ -11,17 +11,8 @@ from database.models import db
 from utils.logger import logger
 
 
-async def is_admin_check(update: Update) -> bool:
-    return await db.is_admin(update.effective_user.id)
-
-
-async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """فتح لوحة الإدارة الرئيسية"""
-    if not await is_admin_check(update):
-        await update.message.reply_text("🚫 أنت لست أدمين.")
-        return
-
-    keyboard = InlineKeyboardMarkup(
+def _main_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("👥 المستخدمين", callback_data="admin_users")],
             [InlineKeyboardButton("📊 الإحصائيات", callback_data="admin_stats")],
@@ -33,7 +24,23 @@ async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("❌ إغلاق", callback_data="admin_close")],
         ]
     )
-    await update.message.reply_text("🛠️ لوحة الإدارة\n\nاختر عملية:", reply_markup=keyboard)
+
+
+async def is_admin_check(update: Update) -> bool:
+    return await db.is_admin(update.effective_user.id)
+
+
+async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """فتح لوحة الإدارة الرئيسية"""
+    if not await is_admin_check(update):
+        await update.message.reply_text("🚫 <b>أنت لست أدمين.</b>", parse_mode="HTML")
+        return
+
+    await update.message.reply_text(
+        "🛠️ <b>لوحة الإدارة</b>\n\nاختر عملية:",
+        parse_mode="HTML",
+        reply_markup=_main_keyboard(),
+    )
 
 
 async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -42,32 +49,37 @@ async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if not await is_admin_check(update):
-        await query.edit_message_text("🚫 أنت لست أدمين.")
+        await query.edit_message_text("🚫 <b>أنت لست أدمين.</b>", parse_mode="HTML")
         return
 
     action = query.data
 
     if action == "admin_users":
         count = await db.count_users()
-        await query.edit_message_text(f"👥 عدد المستخدمين: {count}")
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")]])
+        await query.edit_message_text(
+            f"👥 <b>المستخدمين</b>\n\n• العدد الكلي: {count}",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
 
     elif action == "admin_stats":
         users_count = await db.count_users()
         downloads_count = await db.count_downloads()
-        text = f"""
-📊 إحصائيات البوت:
-
-👥 المستخدمين: {users_count}
-📥 التحميلات: {downloads_count}
-"""
+        text = (
+            f"📊 <b>إحصائيات البوت</b>\n\n"
+            f"• المستخدمين: {users_count}\n"
+            f"• التحميلات: {downloads_count}"
+        )
         keyboard = InlineKeyboardMarkup(
             [[InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")]]
         )
-        await query.edit_message_text(text, reply_markup=keyboard)
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
     elif action == "admin_broadcast_menu":
         await query.edit_message_text(
-            "📢 برودكاست\n\nابعتلي الرسالة اللي تبي تبرودكاست بيها",
+            "📢 <b>برودكاست</b>\n\nابعتلي الرسالة اللي تبي تبرودكاست بيها.",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")]]
             ),
@@ -78,21 +90,18 @@ async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = InlineKeyboardMarkup(
             [
                 [InlineKeyboardButton("🚫 حظر مستخدم", callback_data="admin_ban_user")],
-                [
-                    InlineKeyboardButton(
-                        "✅ رفع حظر", callback_data="admin_unban_user"
-                    )
-                ],
+                [InlineKeyboardButton("✅ رفع حظر", callback_data="admin_unban_user")],
                 [InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")],
             ]
         )
         await query.edit_message_text(
-            "🚫 إدارة الحظر\n\nاختر:", reply_markup=keyboard
+            "🚫 <b>إدارة الحظر</b>\n\nاختر العملية:", parse_mode="HTML", reply_markup=keyboard
         )
 
     elif action == "admin_ban_user":
         await query.edit_message_text(
-            "ابعت آيدي المستخدم اللي تبي تحظره",
+            "🚫 <b>حظر مستخدم</b>\n\nابعت آيدي المستخدم اللي تبي تحظره.",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")]]
             ),
@@ -101,7 +110,8 @@ async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif action == "admin_unban_user":
         await query.edit_message_text(
-            "ابعت آيدي المستخدم اللي تبي ترفع حظره",
+            "✅ <b>رفع حظر</b>\n\nابعت آيدي المستخدم اللي تبي ترفع حظره.",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("🔙 رجوع", callback_data="admin_back")]]
             ),
@@ -115,10 +125,12 @@ async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     chat_id=query.message.chat_id, document=f, filename="bot.log"
                 )
         except FileNotFoundError:
-            await query.edit_message_text("لا يوجد ملف سجل حتى الآن.")
+            await query.edit_message_text(
+                "📝 <b>لا يوجد ملف سجل حتى الآن.</b>", parse_mode="HTML"
+            )
 
     elif action == "admin_update":
-        await query.edit_message_text("⬇️ جاري سحب التحديثات...")
+        await query.edit_message_text("⬇️ <b>جاري سحب التحديثات...</b>", parse_mode="HTML")
         import subprocess
 
         try:
@@ -133,33 +145,27 @@ async def on_admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as e:
             await context.bot.send_message(
-                chat_id=query.message.chat_id, text=f"❌ فشل التحديث: {e}"
+                chat_id=query.message.chat_id,
+                text=f"❌ <b>فشل التحديث</b>\n\n{e}",
+                parse_mode="HTML",
             )
 
     elif action == "admin_restart":
-        await query.edit_message_text("🔄 جاري إعادة التشغيل...")
+        await query.edit_message_text("🔄 <b>جاري إعادة التشغيل...</b>", parse_mode="HTML")
         logger.info("إعادة تشغيل البوت بأمر من الأدمن")
         import sys
 
         sys.exit(0)
 
     elif action == "admin_back":
-        keyboard = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("👥 المستخدمين", callback_data="admin_users")],
-                [InlineKeyboardButton("📊 الإحصائيات", callback_data="admin_stats")],
-                [InlineKeyboardButton("📢 برودكاست", callback_data="admin_broadcast_menu")],
-                [InlineKeyboardButton("🚫 حظر/رفع حظر", callback_data="admin_ban_menu")],
-                [InlineKeyboardButton("📝 السجلات", callback_data="admin_logs")],
-                [InlineKeyboardButton("🔄 تحديث", callback_data="admin_update")],
-                [InlineKeyboardButton("🔌 إعادة تشغيل", callback_data="admin_restart")],
-                [InlineKeyboardButton("❌ إغلاق", callback_data="admin_close")],
-            ]
+        await query.edit_message_text(
+            "🛠️ <b>لوحة الإدارة</b>\n\nاختر عملية:",
+            parse_mode="HTML",
+            reply_markup=_main_keyboard(),
         )
-        await query.edit_message_text("🛠️ لوحة الإدارة\n\nاختر عملية:", reply_markup=keyboard)
 
     elif action == "admin_close":
-        await query.edit_message_text("✅ تم الإغلاق.")
+        await query.edit_message_text("✅ <b>تم الإغلاق.</b>", parse_mode="HTML")
 
 
 async def on_admin_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -173,7 +179,9 @@ async def on_admin_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE
         message = update.message.text
         user_ids = await db.get_all_user_ids()
         sent, failed = 0, 0
-        status_msg = await update.message.reply_text("📢 جاري الإرسال...")
+        status_msg = await update.message.reply_text(
+            "📢 <b>جاري الإرسال...</b>", parse_mode="HTML"
+        )
 
         for uid in user_ids:
             try:
@@ -185,7 +193,8 @@ async def on_admin_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE
             await asyncio.sleep(0.05)
 
         await status_msg.edit_text(
-            f"✅ تم الإرسال لـ {sent} مستخدم\n❌ فشل: {failed}"
+            f"✅ <b>تم الإرسال</b>\n\n• نجح: {sent}\n• فشل: {failed}",
+            parse_mode="HTML",
         )
         context.user_data.pop("admin_action", None)
 
@@ -193,16 +202,21 @@ async def on_admin_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             target_id = int(update.message.text)
             await db.ban_user(target_id)
-            await update.message.reply_text(f"🚫 تم حظر المستخدم {target_id}")
+            await update.message.reply_text(
+                f"🚫 <b>تم حظر المستخدم</b>\n\n• الآيدي: {target_id}", parse_mode="HTML"
+            )
         except ValueError:
-            await update.message.reply_text("⚠️ آيدي غير صحيح.")
+            await update.message.reply_text("⚠️ <b>آيدي غير صحيح.</b>", parse_mode="HTML")
         context.user_data.pop("admin_action", None)
 
     elif action == "unban_user":
         try:
             target_id = int(update.message.text)
             await db.unban_user(target_id)
-            await update.message.reply_text(f"✅ تم رفع الحظر عن المستخدم {target_id}")
+            await update.message.reply_text(
+                f"✅ <b>تم رفع الحظر</b>\n\n• الآيدي: {target_id}", parse_mode="HTML"
+            )
         except ValueError:
-            await update.message.reply_text("⚠️ آيدي غير صحيح.")
+            await update.message.reply_text("⚠️ <b>آيدي غير صحيح.</b>", parse_mode="HTML")
         context.user_data.pop("admin_action", None)
+

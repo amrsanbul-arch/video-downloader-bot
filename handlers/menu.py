@@ -139,13 +139,19 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif action == "download_info":
         if lang == "en":
             await update.message.reply_text(
-                "📥 Just send me any video link (YouTube, TikTok, Facebook, "
-                "Instagram, X/Twitter, etc.) and I'll show you download options!"
+                "📥 <b>How to download</b>\n\n"
+                "• Just send me any video link\n"
+                "• YouTube, TikTok, Facebook, Instagram, X/Twitter, etc.\n"
+                "• Download options will appear automatically",
+                parse_mode="HTML",
             )
         else:
             await update.message.reply_text(
-                "📥 بس ابعتلي رابط أي فيديو (يوتيوب، تيك توك، فيسبوك، انستجرام، "
-                "تويتر/X، وغيرهم) وهتلاقي خيارات التحميل تظهرلك على طول!"
+                "📥 <b>طريقة التحميل</b>\n\n"
+                "• بس ابعتلي رابط أي فيديو\n"
+                "• يوتيوب، تيك توك، فيسبوك، انستجرام، تويتر/X، وغيرهم\n"
+                "• خيارات التحميل هتظهرلك تلقائيًا",
+                parse_mode="HTML",
             )
 
     elif action == "recent_downloads":
@@ -161,20 +167,26 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["support_action"] = True
         if lang == "en":
             await update.message.reply_text(
-                "📞 Write your message and it will be sent directly to the admin.\n"
-                "Send /cancel to cancel."
+                "📞 <b>Contact Support</b>\n\n"
+                "• Write your message and it will be sent directly to the admin\n"
+                "• Send /cancel to cancel",
+                parse_mode="HTML",
             )
         else:
             await update.message.reply_text(
-                "📞 اكتب رسالتك وهتتبعت مباشرة للأدمن.\n"
-                "ابعت /cancel للإلغاء."
+                "📞 <b>تواصل مع الدعم</b>\n\n"
+                "• اكتب رسالتك وهتتبعت مباشرة للأدمن\n"
+                "• ابعت /cancel للإلغاء",
+                parse_mode="HTML",
             )
 
     elif action == "admin_panel":
         if await db.is_admin(user_id):
             await admin_dashboard.cmd_admin(update, context)
         else:
-            await update.message.reply_text("🚫 هذه الميزة للأدمن فقط.")
+            await update.message.reply_text(
+                "🚫 <b>هذه الميزة للأدمن فقط.</b>", parse_mode="HTML"
+            )
 
 
 # ===================== دوال مساعدة =====================
@@ -184,19 +196,20 @@ async def _show_recent_downloads(update: Update, lang: str, user_id: int):
 
     if not rows:
         text = (
-            "📜 لسه مفيش تحميلات سابقة." if lang == "ar"
-            else "📜 No previous downloads yet."
+            "📜 <b>لسه مفيش تحميلات سابقة.</b>" if lang == "ar"
+            else "📜 <b>No previous downloads yet.</b>"
         )
-        await update.message.reply_text(text)
+        await update.message.reply_text(text, parse_mode="HTML")
         return
 
-    lines = ["📜 آخر تحميلاتك:\n"] if lang == "ar" else ["📜 Your recent downloads:\n"]
+    header = "📜 <b>آخر تحميلاتك</b>\n" if lang == "ar" else "📜 <b>Your recent downloads</b>\n"
+    lines = [header]
     for url, site, fmt, created_at in rows:
         date_str = datetime.fromtimestamp(created_at).strftime("%Y-%m-%d %H:%M")
         short_url = url if len(url) <= 45 else url[:42] + "..."
-        lines.append(f"🔗 {short_url}\n📌 {site} | {fmt} | 🕒 {date_str}\n")
+        lines.append(f"• {short_url}\n  📌 {site} | {fmt} | 🕒 {date_str}")
 
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 async def _show_quality_picker(update: Update, lang: str):
@@ -204,9 +217,9 @@ async def _show_quality_picker(update: Update, lang: str):
     current_label = f"{current}p" if current else ("غير محدد" if lang == "ar" else "Not set")
 
     text = (
-        f"🎚️ جودتك الافتراضية الحالية: <b>{current_label}</b>\n\nاختار جودة جديدة:"
+        f"🎚️ <b>الجودة الافتراضية</b>\n\n• الحالية: {current_label}\n\nاختار جودة جديدة:"
         if lang == "ar" else
-        f"🎚️ Current default quality: <b>{current_label}</b>\n\nPick a new one:"
+        f"🎚️ <b>Default Quality</b>\n\n• Current: {current_label}\n\nPick a new one:"
     )
 
     keyboard = InlineKeyboardMarkup(
@@ -232,12 +245,12 @@ async def on_quality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if value == "none":
         await set_default_quality(user_id, "")
-        msg = "✅ تم إلغاء الجودة الافتراضية. هتختار في كل مرة." if lang == "ar" else "✅ Default quality cleared."
+        msg = "✅ <b>تم إلغاء الجودة الافتراضية.</b>\n\nهتختار في كل مرة." if lang == "ar" else "✅ <b>Default quality cleared.</b>"
     else:
         await set_default_quality(user_id, value)
-        msg = f"✅ تم حفظ {value}p كجودة افتراضية لك." if lang == "ar" else f"✅ Saved {value}p as your default quality."
+        msg = f"✅ <b>تم الحفظ</b>\n\n• الجودة الافتراضية: {value}p" if lang == "ar" else f"✅ <b>Saved</b>\n\n• Default quality: {value}p"
 
-    await query.edit_message_text(msg)
+    await query.edit_message_text(msg, parse_mode="HTML")
 
 
 async def _show_my_info(update: Update, lang: str, user_id: int):
@@ -256,20 +269,20 @@ async def _show_my_info(update: Update, lang: str, user_id: int):
     if lang == "en":
         text = (
             f"🆔 <b>My Info</b>\n\n"
-            f"User ID: <code>{user_id}</code>\n"
-            f"Username: {username}\n"
-            f"Joined: {joined_str}\n"
-            f"Total downloads: {downloads_count}\n"
-            f"Default quality: {quality_label}"
+            f"• User ID: <code>{user_id}</code>\n"
+            f"• Username: {username}\n"
+            f"• Joined: {joined_str}\n"
+            f"• Total downloads: {downloads_count}\n"
+            f"• Default quality: {quality_label}"
         )
     else:
         text = (
             f"🆔 <b>معلوماتي</b>\n\n"
-            f"آيدي تليجرام: <code>{user_id}</code>\n"
-            f"اسم المستخدم: {username}\n"
-            f"تاريخ الانضمام: {joined_str}\n"
-            f"عدد التحميلات الكلي: {downloads_count}\n"
-            f"الجودة الافتراضية: {quality_label}"
+            f"• آيدي تليجرام: <code>{user_id}</code>\n"
+            f"• اسم المستخدم: {username}\n"
+            f"• تاريخ الانضمام: {joined_str}\n"
+            f"• عدد التحميلات الكلي: {downloads_count}\n"
+            f"• الجودة الافتراضية: {quality_label}"
         )
 
     await update.message.reply_text(text, parse_mode="HTML")

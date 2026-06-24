@@ -1,16 +1,16 @@
 {
-  "start": "👋 Hello {name}!\n\nI'm a social media video downloader bot (YouTube, TikTok, Facebook, Instagram, X/Twitter, and more).\n\n📥 Just send me a video link and download options will appear.\n\nType /help to see all commands.",
-  "help": "📖 Commands list:\n\n/start - Start the bot\n/help - Show this menu\n/about - About this bot\n/settings - Settings\n/stats - Your stats\n/lang - Change language\n/ping - Check bot response time\n\n📥 To download a video: just send the link in chat.",
-  "about": "ℹ️ Professional video downloader bot\n\nSupports: {sites}\n\nBuilt with Python + yt-dlp + python-telegram-bot",
-  "ping": "🏓 Pong!\nResponse time: {ms} ms",
-  "settings": "⚙️ Settings\n\nCurrent language: {current_lang}\nTo change language use /lang",
-  "stats_user": "📊 Your stats:\n\nDownloads: {downloads}",
-  "lang_choose": "🌐 Choose your language:",
-  "lang_changed": "✅ Language changed to English",
-  "banned": "🚫 You are banned from using this bot.",
-  "rate_limited": "⏳ Slow down! Please wait a moment and try again.",
-  "invalid_url": "❌ This link is invalid or the site is not supported.",
-  "analyzing": "🔍 Analyzing the link... please wait.",
-  "coming_soon": "🚧 Download feature is under development and will be enabled in the next project phase."
+  "start": "👋 <b>Hello {name}!</b>\n\n• I'm a social media video downloader bot\n• YouTube, TikTok, Facebook, Instagram, X/Twitter, and more\n\n📥 Send me a video link and download options will appear.\n\nType /help to see all commands.",
+  "help": "📖 <b>Commands list</b>\n\n• /start — Start the bot\n• /help — Show this menu\n• /about — About this bot\n• /settings — Settings\n• /stats — Your stats\n• /lang — Change language\n• /ping — Check bot response time\n\n📥 To download a video: just send the link in chat.",
+  "about": "ℹ️ <b>About this bot</b>\n\n• Professional video downloader bot\n• Supported platforms: {sites}\n• Built with Python + yt-dlp + python-telegram-bot",
+  "ping": "🏓 <b>Pong!</b>\n\n• Response time: {ms} ms",
+  "settings": "⚙️ <b>Settings</b>\n\n• Current language: {current_lang}\n\nTo change language use /lang",
+  "stats_user": "📊 <b>Your stats</b>\n\n• Downloads: {downloads}",
+  "lang_choose": "🌐 <b>Choose your language:</b>",
+  "lang_changed": "✅ <b>Language changed to English</b>",
+  "banned": "🚫 <b>You are banned from using this bot.</b>",
+  "rate_limited": "⏳ <b>Slow down!</b>\n\nPlease wait a moment and try again.",
+  "invalid_url": "❌ <b>Invalid link</b>\n\nMake sure the site is supported.",
+  "analyzing": "🔍 <b>Analyzing...</b>",
+  "coming_soon": "🚧 <b>Feature under development</b>\n\nWill be enabled in the next project phase."
 }
 
