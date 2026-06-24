@@ -1,11 +1,10 @@
 """
 handlers/download.py
-استقبال الروابط، عرض معلومات الفيديو، اختيار جودة دقيقة، وتحميل محسّن مع شريط تقدم
+استقبال الروابط، تحليل مفصّل، شبكة جودات كاملة (144p → 1080p + Best)
 """
 
 import uuid
 import html
-import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
@@ -14,60 +13,94 @@ from database.models import db
 from utils.logger import logger
 from utils.i18n import t
 from utils.validators import is_valid_url, detect_site, extract_first_url
-from utils.helpers import rate_limiter, format_size, format_duration
+from utils.helpers import rate_limiter, format_duration
 from services.downloader import (
     get_video_info,
+    get_quality_estimates,
     download_video,
-    get_available_formats,
     cleanup_file,
 )
 from services.audio import download_audio
 from services.thumbnail import download_thumbnail
 from handlers.menu import get_default_quality
 
-# تخزين مؤقت: يربط معرف قصير برابط الفيديو الكامل
 _pending_urls: dict[str, str] = {}
-# تخزين الفيديوهات المحملة مؤخراً (للكاش)
-_downloaded_cache: dict[str, str] = {}
+
+QUALITY_GRID = [144, 240, 360, 480, 720, 1080]
 
 
 async def get_lang(user_id: int) -> str:
     return await db.get_user_language(user_id)
 
 
-def _build_caption(info: dict) -> str:
+def _kb_str(size_bytes: int) -> str:
+    """تنسيق الحجم بالكيلوبايت/ميجابايت بدقّة عشرية (لمطابقة ستايل التحليل)"""
+    if not size_bytes:
+        return "—"
+    kb = size_bytes / 1024
+    if kb < 1024:
+        return f"{kb:.2f} KB"
+    return f"{kb / 1024:.2f} MB"
+
+
+def _build_analysis_caption(info: dict, site: str, estimates: dict) -> str:
     title = html.escape(info["title"])
     duration = format_duration(info["duration"])
-    size = format_size(info["filesize"])
-    return (
-        f"🎬 <b>{title}</b>\n\n"
-        f"⏱ المدة: {duration}\n"
-        f"📦 الحجم التقريبي: {size}\n"
-        f"🌐 المصدر: {info['extractor']}\n\n"
-        f"اختر طريقة التحميل:"
-    )
+    uploader = html.escape(str(info.get("uploader", "—")))
+    default_height = info.get("height") or 0
+    abr = int(info.get("abr") or 128)
+
+    lines = [
+        "🔍 <b>تم التحليل</b>\n",
+        f"• المنصة: {site}",
+        f"• العنوان: {title}",
+        f"• المدة: {duration}",
+        f"• القناة/الناشر: {uploader}",
+        f"• الجودة الافتراضية: {default_height if default_height else '—'}",
+        f"• الصوت الافتراضي: {abr}kbps",
+        "",
+        "أحجام تقديرية:",
+    ]
+
+    if estimates:
+        for height in sorted(estimates.keys()):
+            lines.append(f"• {height}p ≈ {_kb_str(estimates[height])}")
+    else:
+        lines.append("• غير متوفرة")
+
+    lines.append("")
+    lines.append("اختر نوع التحميل:")
+
+    return "\n".join(lines)
 
 
 def _build_quality_keyboard(short_id: str, default_quality: str = "") -> InlineKeyboardMarkup:
-    """بناء لوحة مفاتيح الجودات المتاحة، مع تمييز الجودة الافتراضية للمستخدم بنجمة"""
-    def label(base: str, height: str) -> str:
-        return f"⭐ {base}" if default_quality == height else base
+    """شبكة جودات 3×2 + Best + صوت/صورة + رجوع"""
+    def label(height: int) -> str:
+        text = f"{height}p"
+        return f"⭐ {text}" if default_quality == str(height) else text
 
-    return InlineKeyboardMarkup(
+    rows = []
+    for i in range(0, len(QUALITY_GRID), 3):
+        row = [
+            InlineKeyboardButton(label(h), callback_data=f"dlq_{h}_{short_id}")
+            for h in QUALITY_GRID[i : i + 3]
+        ]
+        rows.append(row)
+
+    rows.append([InlineKeyboardButton("⚡ Best", callback_data=f"dlq_best_{short_id}")])
+    rows.append(
         [
-            [InlineKeyboardButton(label("🎥 2160p (4K)", "2160"), callback_data=f"dlq_2160_{short_id}")],
-            [InlineKeyboardButton(label("🎬 1080p (Full HD)", "1080"), callback_data=f"dlq_1080_{short_id}")],
-            [InlineKeyboardButton(label("📱 720p (HD)", "720"), callback_data=f"dlq_720_{short_id}")],
-            [InlineKeyboardButton(label("📞 480p (Mobile)", "480"), callback_data=f"dlq_480_{short_id}")],
-            [InlineKeyboardButton("🎵 صوت MP3", callback_data=f"dl_audio_{short_id}")],
-            [InlineKeyboardButton("🖼 صورة مصغرة", callback_data=f"dl_thumb_{short_id}")],
-            [InlineKeyboardButton("❌ إلغاء", callback_data=f"dl_cancel_{short_id}")],
+            InlineKeyboardButton("🎵 صوت MP3", callback_data=f"dl_audio_{short_id}"),
+            InlineKeyboardButton("🖼 صورة مصغرة", callback_data=f"dl_thumb_{short_id}"),
         ]
     )
+    rows.append([InlineKeyboardButton("🔙 رجوع", callback_data=f"dl_cancel_{short_id}")])
+
+    return InlineKeyboardMarkup(rows)
 
 
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """استقبال الرسائل النصية، استخراج الرابط، وعرض معلومات الفيديو"""
     user = update.effective_user
     await db.add_or_update_user(user.id, user.username or "", user.first_name or "")
 
@@ -89,17 +122,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(t("invalid_url", lang))
         return
 
-    status_msg = await update.message.reply_text(t("analyzing", lang))
+    status_msg = await update.message.reply_text("🔍 جاري التحليل...")
 
     try:
         info = await get_video_info(url)
+        estimates = await get_quality_estimates(url)
     except Exception as e:
         logger.error(f"فشل تحليل الرابط {url}: {e}")
         err_text = str(e).lower()
         if "login" in err_text or "authentication" in err_text or "cookies" in err_text:
             await status_msg.edit_text(
-                "🔒 هذا الفيديو يحتاج تسجيل دخول (الموقع طلب Cookies). "
-                "لازم تضيف ملف كوكيز في إعدادات البوت لتحميل هذا النوع من الروابط."
+                "🔒 هذا الفيديو يحتاج تسجيل دخول (الموقع طلب Cookies)."
             )
         else:
             await status_msg.edit_text("❌ تعذر تحليل هذا الرابط. تأكد إن الموقع مدعوم.")
@@ -112,18 +145,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await db.log_download(user.id, url, site, "analyzed", "pending")
 
     default_quality = await get_default_quality(user.id)
-    caption = _build_caption(info)
+    caption = _build_analysis_caption(info, site, estimates)
     keyboard = _build_quality_keyboard(short_id, default_quality)
     await status_msg.edit_text(caption, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """التعامل مع ضغط المستخدم على أحد أزرار التحميل"""
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
-    lang = await get_lang(user_id)
 
     data = query.data
     parts = data.split("_", 2)
@@ -143,18 +174,22 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     try:
-        await query.edit_message_text("⏳ جاري التحميل...\n\n[░░░░░░░░░░] 0%")
+        await query.edit_message_text("✅ تم استلام طلبك.\n\nسأرسل الملف فور الانتهاء.")
     except Exception:
-        pass  # لو فشل التعديل (مثلاً الرسالة قديمة جدًا)، نكمل عادي
+        pass
 
     file_path = None
     try:
-        # تحديد نوع الملف المطلوب
-        if action in ["2160", "1080", "720", "480"]:  # جودة محددة
+        if action == "best":
+            file_path = await download_video(url, quality="custom")
+            await _send_with_size_check(query, context, file_path, is_video=True)
+            format_name = "Best"
+
+        elif action.isdigit():
             height = int(action)
             file_path = await download_video(url, quality="custom", height=height)
             await _send_with_size_check(query, context, file_path, is_video=True)
-            format_name = f"{action}p"
+            format_name = f"{height}p"
 
         elif action == "audio":
             file_path = await download_audio(url)
@@ -167,6 +202,8 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             with open(file_path, "rb") as f:
                 await context.bot.send_photo(chat_id=query.message.chat_id, photo=f)
             format_name = "Thumbnail"
+        else:
+            format_name = action
 
         site = detect_site(url)
         await db.log_download(user_id, url, site, format_name, "success")
@@ -187,7 +224,6 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def _send_with_size_check(query, context, file_path: str, is_video: bool):
-    """إرسال الملف للمستخدم بعد التأكد إنه ضمن الحد المسموح به"""
     import os
 
     size_mb = os.path.getsize(file_path) / (1024 * 1024)
@@ -200,9 +236,7 @@ async def _send_with_size_check(query, context, file_path: str, is_video: bool):
 
     with open(file_path, "rb") as f:
         if is_video:
-            await context.bot.send_video(
-                chat_id=query.message.chat_id, video=f, supports_streaming=True
-            )
+            await context.bot.send_video(chat_id=query.message.chat_id, video=f, supports_streaming=True)
         else:
             await context.bot.send_audio(chat_id=query.message.chat_id, audio=f)
 

@@ -67,6 +67,9 @@ async def get_video_info(url: str) -> dict:
         "thumbnail": info.get("thumbnail"),
         "webpage_url": info.get("webpage_url", url),
         "extractor": info.get("extractor_key", "Unknown"),
+        "uploader": info.get("uploader") or info.get("channel") or "—",
+        "abr": info.get("abr") or 128,
+        "height": info.get("height") or 0,
     }
 
 
@@ -110,23 +113,25 @@ async def download_video(url: str, quality: str = "high", height: int = None) ->
     raise FileNotFoundError("فشل تحميل الفيديو - لم يتم العثور على الملف الناتج")
 
 
-async def get_available_formats(url: str) -> list[dict]:
+async def get_quality_estimates(url: str) -> dict:
     """
-    استخراج قائمة الجودات المتاحة للفيديو
-    يرجع قائمة من {height, fps, format_id}
+    إرجاع قاموس {height: estimated_filesize_bytes} لكل جودة متاحة فعليًا للفيديو
     """
     loop = asyncio.get_event_loop()
     info = await loop.run_in_executor(None, _extract_info_sync, url)
-    
+
     formats = info.get("formats", [])
-    available_heights = set()
-    
+    estimates: dict[int, int] = {}
+
     for fmt in formats:
         height = fmt.get("height")
-        if height and height in [480, 720, 1080, 2160]:
-            available_heights.add(height)
-    
-    return sorted(list(available_heights), reverse=True)
+        if not height:
+            continue
+        size = fmt.get("filesize") or fmt.get("filesize_approx") or 0
+        if size and (height not in estimates or size > estimates[height]):
+            estimates[height] = size
+
+    return estimates
 
 
 def cleanup_file(path: str):
@@ -136,3 +141,4 @@ def cleanup_file(path: str):
             os.remove(path)
     except OSError:
         pass
+
