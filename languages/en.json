@@ -1,5 +1,5 @@
 {
-  "start": "👋 <b>Hello {name}!</b>\n\n• I'm a social media video downloader bot\n• YouTube, TikTok, Facebook, Instagram, X/Twitter, and more\n\n📥 Send me a video link and download options will appear.\n\nType /help to see all commands.",
+  "start": "✨ <b>Welcome, {name}</b> ✨\n\n━━━━━━━━━━━━━━━\n\n🎬 <b>Video Downloader Bot</b>\nDownload your favorite videos from social media in one tap\n\n📲 <b>Supported platforms:</b>\nYouTube • TikTok • Facebook\nInstagram • X (Twitter) • and more\n\n⚡ <b>Features:</b>\n• Choose quality (144p → 1080p)\n• Download MP3 audio\n• Extract thumbnail\n• Fast and easy to use\n\n━━━━━━━━━━━━━━━\n\n📥 Send me a video link now and try it!\nOr use the menu below 👇",
   "help": "📖 <b>Commands list</b>\n\n• /start — Start the bot\n• /help — Show this menu\n• /about — About this bot\n• /settings — Settings\n• /stats — Your stats\n• /lang — Change language\n• /ping — Check bot response time\n\n📥 To download a video: just send the link in chat.",
   "about": "ℹ️ <b>About this bot</b>\n\n• Professional video downloader bot\n• Supported platforms: {sites}\n• Built with Python + yt-dlp + python-telegram-bot",
   "ping": "🏓 <b>Pong!</b>\n\n• Response time: {ms} ms",

@@ -131,7 +131,7 @@ def main():
 
 
 async def _forward_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تحويل رسالة الدعم من المستخدم للأونر مباشرة"""
+    """تحويل رسالة التواصل مع المطور للأونر مباشرة"""
     context.user_data.pop("support_action", None)
     user = update.effective_user
     text = update.message.text
@@ -140,17 +140,17 @@ async def _forward_support_message(update: Update, context: ContextTypes.DEFAULT
         await context.bot.send_message(
             chat_id=config.OWNER_ID,
             text=(
-                f"📞 رسالة دعم جديدة\n\n"
+                f"📨 رسالة جديدة (تواصل مع المطور)\n\n"
                 f"من: {user.first_name or ''} (@{user.username or '—'})\n"
                 f"آيدي: {user.id}\n\n"
                 f"الرسالة:\n{text}"
             ),
         )
         await update.message.reply_text(
-            "✅ <b>تم إرسال رسالتك للدعم.</b>\n\nهيتم الرد عليك قريبًا.", parse_mode="HTML"
+            "✅ <b>تم إرسال رسالتك للمطور.</b>\n\nهيتم الرد عليك قريبًا.", parse_mode="HTML"
         )
     except Exception as e:
-        logger.error(f"فشل تحويل رسالة الدعم: {e}")
+        logger.error(f"فشل تحويل الرسالة للمطور: {e}")
         await update.message.reply_text(
             "❌ <b>حصل خطأ أثناء إرسال رسالتك.</b>\n\nحاول تاني.", parse_mode="HTML"
         )

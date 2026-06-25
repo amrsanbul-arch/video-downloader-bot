@@ -33,7 +33,7 @@ def build_main_menu(lang: str = "ar", is_admin: bool = False) -> ReplyKeyboardMa
             [KeyboardButton("Download Video")],
             [KeyboardButton("Help"), KeyboardButton("Settings"), KeyboardButton("My Stats")],
             [KeyboardButton("Recent Downloads"), KeyboardButton("Default Quality"), KeyboardButton("My Info")],
-            [KeyboardButton("Contact Support"), KeyboardButton("Language"), KeyboardButton("Ping")],
+            [KeyboardButton("Contact Developer"), KeyboardButton("Language"), KeyboardButton("Ping")],
         ]
         if is_admin:
             buttons.append([KeyboardButton("Admin Panel")])
@@ -42,7 +42,7 @@ def build_main_menu(lang: str = "ar", is_admin: bool = False) -> ReplyKeyboardMa
             [KeyboardButton("تحميل فيديو")],
             [KeyboardButton("المساعدة"), KeyboardButton("الإعدادات"), KeyboardButton("إحصائياتي")],
             [KeyboardButton("تحميلاتي الأخيرة"), KeyboardButton("الجودة الافتراضية"), KeyboardButton("معلوماتي")],
-            [KeyboardButton("تواصل مع الدعم"), KeyboardButton("اللغة"), KeyboardButton("فحص السرعة")],
+            [KeyboardButton("تواصل مع المطور"), KeyboardButton("اللغة"), KeyboardButton("فحص السرعة")],
         ]
         if is_admin:
             buttons.append([KeyboardButton("لوحة التحكم")])
@@ -64,7 +64,7 @@ BUTTON_TEXTS_AR = {
     "تحميلاتي الأخيرة": "recent_downloads",
     "الجودة الافتراضية": "default_quality",
     "معلوماتي": "my_info",
-    "تواصل مع الدعم": "contact_support",
+    "تواصل مع المطور": "contact_support",
     "اللغة": "lang",
     "فحص السرعة": "ping",
     "لوحة التحكم": "admin_panel",
@@ -78,7 +78,7 @@ BUTTON_TEXTS_EN = {
     "Recent Downloads": "recent_downloads",
     "Default Quality": "default_quality",
     "My Info": "my_info",
-    "Contact Support": "contact_support",
+    "Contact Developer": "contact_support",
     "Language": "lang",
     "Ping": "ping",
     "Admin Panel": "admin_panel",
@@ -165,15 +165,15 @@ async def handle_menu_button(update: Update, context: ContextTypes.DEFAULT_TYPE)
         context.user_data["support_action"] = True
         if lang == "en":
             await update.message.reply_text(
-                "📞 <b>Contact Support</b>\n\n"
-                "• Write your message and it will be sent directly to the admin\n"
+                "<b>Contact Developer</b>\n\n"
+                "• Write your message and it will be sent directly to the developer\n"
                 "• Send /cancel to cancel",
                 parse_mode="HTML",
             )
         else:
             await update.message.reply_text(
-                "📞 <b>تواصل مع الدعم</b>\n\n"
-                "• اكتب رسالتك وهتتبعت مباشرة للأدمن\n"
+                "<b>تواصل مع المطور</b>\n\n"
+                "• اكتب رسالتك وهتتبعت مباشرة للمطور\n"
                 "• ابعت /cancel للإلغاء",
                 parse_mode="HTML",
             )
