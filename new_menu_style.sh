@@ -1,3 +1,9 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# new_menu_style.sh
+set -e
+echo "🔧 تطبيق شكل القائمة الجديد (بدون إيموجي)..."
+
+cat > handlers/menu.py << 'ZEOF_MARKER_UNIQUE'
 """
 handlers/menu.py
 قائمة أزرار ثابتة (Reply Keyboard) موسّعة بميزات إضافية:
@@ -285,3 +291,19 @@ async def _show_my_info(update: Update, lang: str, user_id: int):
 
     await update.message.reply_text(text, parse_mode="HTML")
 
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث handlers/menu.py"
+
+echo "🔍 فحص الأكواد..."
+python -m py_compile handlers/menu.py
+
+echo ""
+echo "✅✅✅ تم تطبيق شكل القائمة الجديد بنجاح! ✅✅✅"
+echo ""
+echo "الخطوة الجاية:"
+echo "  git add ."
+echo "  git commit -m 'Remove emojis from menu buttons, main button full width'"
+echo "  git push"
+echo "  bash run.sh"
+echo ""
+echo "بعد التشغيل ابعت /start تاني عشان القائمة الجديدة تظهر"
