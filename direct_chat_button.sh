@@ -1,3 +1,279 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# direct_chat_button.sh
+set -e
+echo "🔧 تطبيق زرار التواصل المباشر مع المطور..."
+
+cat > 'config.py' << 'ZEOF_MARKER_UNIQUE'
+"""
+config.py
+ملف الإعدادات الرئيسي للبوت - يقرأ المتغيرات من .env
+"""
+
+import os
+from dotenv import load_dotenv
+
+# تحميل متغيرات البيئة من ملف .env
+load_dotenv()
+
+
+class Config:
+    # ===== التوكن والمالك =====
+    BOT_TOKEN: str = os.getenv("BOT_TOKEN", "")
+    OWNER_ID: int = int(os.getenv("OWNER_ID", "0"))
+
+    # تحويل قائمة الأدمنز من نص إلى أرقام
+    _admin_raw = os.getenv("ADMIN_IDS", "")
+    ADMIN_IDS: list[int] = [
+        int(x.strip()) for x in _admin_raw.split(",") if x.strip().isdigit()
+    ]
+
+    # ===== التحميل =====
+    MAX_FILE_SIZE_MB: int = int(os.getenv("MAX_FILE_SIZE_MB", "2000"))
+    DOWNLOAD_DIR: str = os.getenv("DOWNLOAD_DIR", "downloads")
+    DOWNLOAD_TIMEOUT: int = int(os.getenv("DOWNLOAD_TIMEOUT", "300"))
+
+    # ===== قاعدة البيانات =====
+    DATABASE_PATH: str = os.getenv("DATABASE_PATH", "database/bot.db")
+
+    # ===== Cookies (لمواقع تطلب تسجيل دخول مثل Reddit/Instagram/TikTok أحيانًا) =====
+    COOKIES_FILE: str = os.getenv("COOKIES_FILE", "")
+
+    # ===== Force Subscribe (اختياري) =====
+    # ضع اسم القناة بدون @ (مثل: channel_name)
+    FORCE_SUBSCRIBE_CHANNEL: str = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "")
+
+    # ===== اسم البوت (يظهر في رسائل "تواصل مع المطور" لتمييزه لو عندك أكتر من بوت) =====
+    BOT_DISPLAY_NAME: str = os.getenv("BOT_DISPLAY_NAME", "بوت تحميل الفيديوهات")
+
+    # ===== يوزر المطور على تليجرام (بدون @) =====
+    # زرار "تواصل مع المطور" هيفتح شات مباشر مع هذا اليوزر
+    OWNER_USERNAME: str = os.getenv("OWNER_USERNAME", "")
+
+    # ===== اللغة =====
+    DEFAULT_LANGUAGE: str = os.getenv("DEFAULT_LANGUAGE", "ar")
+
+    # ===== Rate Limit =====
+    RATE_LIMIT_MESSAGES: int = int(os.getenv("RATE_LIMIT_MESSAGES", "5"))
+    RATE_LIMIT_SECONDS: int = int(os.getenv("RATE_LIMIT_SECONDS", "10"))
+
+    # ===== المواقع المدعومة (لعرضها في /help و /about) =====
+    SUPPORTED_SITES = [
+        "YouTube", "TikTok", "Facebook", "Instagram", "X (Twitter)",
+        "Snapchat", "Reddit", "Pinterest", "Vimeo", "Dailymotion",
+    ]
+
+    @classmethod
+    def validate(cls):
+        """التحقق من وجود الإعدادات الأساسية قبل تشغيل البوت"""
+        errors = []
+        if not cls.BOT_TOKEN:
+            errors.append("BOT_TOKEN غير موجود في ملف .env")
+        if cls.OWNER_ID == 0:
+            errors.append("OWNER_ID غير موجود أو غير صحيح في ملف .env")
+
+        if errors:
+            raise ValueError(
+                "❌ أخطاء في الإعدادات:\n" + "\n".join(f"- {e}" for e in errors)
+            )
+
+        # التأكد من وجود المجلدات المطلوبة
+        os.makedirs(cls.DOWNLOAD_DIR, exist_ok=True)
+        os.makedirs("logs", exist_ok=True)
+        os.makedirs(os.path.dirname(cls.DATABASE_PATH) or ".", exist_ok=True)
+
+        # تحذير (وليس خطأ يوقف البوت) لو ملف الكوكيز محدد بس غير موجود فعليًا
+        if cls.COOKIES_FILE and not os.path.exists(cls.COOKIES_FILE):
+            print(
+                f"⚠️ تحذير: ملف الكوكيز '{cls.COOKIES_FILE}' محدد في .env "
+                f"لكنه غير موجود في المسار. التحميل من مواقع تتطلب تسجيل دخول سيفشل."
+            )
+
+
+config = Config()
+
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث config.py"
+
+cat > '.env.example' << 'ZEOF_MARKER_UNIQUE'
+# ===== إعدادات البوت الأساسية =====
+BOT_TOKEN=ضع_التوكن_هنا
+
+# آي دي الأونر (المالك) - رقم تليجرام بتاعك
+OWNER_ID=123456789
+
+# آي ديز المشرفين، مفصولة بفاصلة (اختياري)
+ADMIN_IDS=
+
+# ===== إعدادات التحميل =====
+MAX_FILE_SIZE_MB=2000
+DOWNLOAD_DIR=downloads
+DOWNLOAD_TIMEOUT=300
+
+# ===== إعدادات قاعدة البيانات =====
+DATABASE_PATH=database/bot.db
+
+# مسار ملف الكوكيز (اختياري) - مطلوب لبعض المواقع اللي بقت تطلب تسجيل دخول
+# مثل Reddit وبعض فيديوهات انستجرام/تيك توك الخاصة
+# اتركه فاضي لو مش محتاجه
+COOKIES_FILE=
+
+# ===== Force Subscribe (اختياري) =====
+# اسم القناة بدون @ لو تبي تفرض اشتراك على المستخدمين قبل التحميل
+# مثل: my_channel أو اتركه فاضي للتعطيل
+FORCE_SUBSCRIBE_CHANNEL=
+
+# اسم البوت يظهر في رسائل "تواصل مع المطور" (مفيد لو شغال عدة بوتات بنفس حساب المطور)
+BOT_DISPLAY_NAME=بوت تحميل الفيديوهات
+
+# يوزرك على تليجرام بدون @ (مثل: amrsanbul)
+# زرار "تواصل مع المطور" هيفتح شات مباشر معاك بدالة هذا اليوزر
+OWNER_USERNAME=
+
+# ===== إعدادات اللغة =====
+DEFAULT_LANGUAGE=ar
+
+# ===== Rate Limit =====
+RATE_LIMIT_MESSAGES=5
+RATE_LIMIT_SECONDS=10
+
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث .env.example"
+
+cat > 'bot.py' << 'ZEOF_MARKER_UNIQUE'
+"""
+bot.py - النسخة 2.4
+- لوحة إدارة كاملة
+- اختيار جودة دقيقة + جودة افتراضية
+- Force Subscribe
+- شريط تقدم
+- قائمة أزرار ثابتة موسّعة
+- زرار "تواصل مع المطور" يفتح شات تليجرام مباشر
+"""
+
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
+
+from config import config
+from database.models import db
+from utils.logger import logger
+
+from handlers import start, help as help_handler, settings, admin, download
+from handlers import admin_dashboard, force_subscribe, menu
+
+
+async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
+    logger.error(f"حدث خطأ غير متوقع: {context.error}", exc_info=context.error)
+
+
+async def post_init(application: Application):
+    await db.connect()
+    logger.info("✅ تم الاتصال بقاعدة البيانات بنجاح")
+
+
+async def post_shutdown(application: Application):
+    await db.close()
+    logger.info("🔌 تم إغلاق الاتصال بقاعدة البيانات")
+
+
+async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """إلغاء أي عملية معلّقة (برودكاست/حظر من جانب الأدمن)"""
+    context.user_data.pop("admin_action", None)
+    await update.message.reply_text("✅ <b>تم الإلغاء.</b>", parse_mode="HTML")
+
+
+def main():
+    config.validate()
+    logger.info("🚀 بدء تشغيل البوت...")
+
+    app = (
+        Application.builder()
+        .token(config.BOT_TOKEN)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(30)
+        .post_init(post_init)
+        .post_shutdown(post_shutdown)
+        .build()
+    )
+
+    # ===== أوامر عامة =====
+    app.add_handler(CommandHandler("start", start.cmd_start))
+    app.add_handler(CommandHandler("about", start.cmd_about))
+    app.add_handler(CommandHandler("ping", start.cmd_ping))
+    app.add_handler(CommandHandler("lang", start.cmd_lang))
+    app.add_handler(CommandHandler("cancel", cmd_cancel))
+    app.add_handler(CallbackQueryHandler(start.on_lang_callback, pattern="^setlang_"))
+
+    app.add_handler(CommandHandler("help", help_handler.cmd_help))
+
+    app.add_handler(CommandHandler("settings", settings.cmd_settings))
+    app.add_handler(CommandHandler("stats", settings.cmd_stats))
+
+    # ===== أوامر الإدارة (القديمة) =====
+    app.add_handler(CommandHandler("users", admin.cmd_users))
+    app.add_handler(CommandHandler("botstats", admin.cmd_botstats))
+    app.add_handler(CommandHandler("ban", admin.cmd_ban))
+    app.add_handler(CommandHandler("unban", admin.cmd_unban))
+    app.add_handler(CommandHandler("broadcast", admin.cmd_broadcast))
+    app.add_handler(CommandHandler("logs", admin.cmd_logs))
+    app.add_handler(CommandHandler("restart", admin.cmd_restart))
+    app.add_handler(CommandHandler("update", admin.cmd_update))
+
+    # ===== لوحة الإدارة الجديدة =====
+    app.add_handler(CommandHandler("admin", admin_dashboard.cmd_admin))
+    app.add_handler(
+        CallbackQueryHandler(admin_dashboard.on_admin_callback, pattern="^admin_")
+    )
+
+    # ===== الجودة الافتراضية =====
+    app.add_handler(CallbackQueryHandler(menu.on_quality_callback, pattern="^setq_"))
+
+    # ===== معالج نصوص موحّد =====
+    async def on_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # 1. ضغطة على زر من القائمة الثابتة؟
+        if await menu.is_menu_button(update):
+            await menu.handle_menu_button(update, context)
+            return
+
+        # 2. الأدمن وسط عملية (برودكاست/حظر)؟
+        pending_action = context.user_data.get("admin_action")
+        if pending_action and await admin_dashboard.is_admin_check(update):
+            await admin_dashboard.on_admin_text_input(update, context)
+            return
+
+        # 3. التحقق من Force Subscribe
+        if not await force_subscribe.check_subscription(update, context):
+            await force_subscribe.send_subscribe_message(update, context)
+            return
+
+        # 4. معالجة كرابط فيديو عادي
+        await download.on_message(update, context)
+
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_message))
+    app.add_handler(CallbackQueryHandler(download.on_download_callback, pattern="^dl"))
+
+    # ===== معالجة الأخطاء =====
+    app.add_error_handler(on_error)
+
+    logger.info("✅ البوت شغال دلوقتي...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
+    main()
+
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث bot.py"
+
+cat > 'handlers/menu.py' << 'ZEOF_MARKER_UNIQUE'
 """
 handlers/menu.py
 قائمة أزرار ثابتة (Reply Keyboard) موسّعة بميزات إضافية:
@@ -289,3 +565,19 @@ async def _show_my_info(update: Update, lang: str, user_id: int):
 
     await update.message.reply_text(text, parse_mode="HTML")
 
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث handlers/menu.py"
+
+echo "🔍 فحص الأكواد..."
+python -m py_compile config.py bot.py handlers/menu.py
+echo ""
+echo "✅✅✅ تم بنجاح! ✅✅✅"
+echo ""
+echo "مهم جدًا: ضيف يوزرك في .env قبل ما ترفع:"
+echo "  OWNER_USERNAME=يوزرك_بدون_@"
+echo ""
+echo "الخطوة الجاية:"
+echo "  git add ."
+echo "  git commit -m 'Contact Developer button opens direct chat'"
+echo "  git push"
+echo "  bash run.sh"

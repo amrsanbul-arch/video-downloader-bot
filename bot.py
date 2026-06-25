@@ -1,10 +1,11 @@
 """
-bot.py - النسخة 2.3
+bot.py - النسخة 2.4
 - لوحة إدارة كاملة
 - اختيار جودة دقيقة + جودة افتراضية
 - Force Subscribe
 - شريط تقدم
-- قائمة أزرار ثابتة موسّعة (تحميلاتي الأخيرة، معلوماتي، تواصل مع الدعم، لوحة تحكم)
+- قائمة أزرار ثابتة موسّعة
+- زرار "تواصل مع المطور" يفتح شات تليجرام مباشر
 """
 
 from telegram import Update
@@ -40,8 +41,7 @@ async def post_shutdown(application: Application):
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """إلغاء أي عملية معلّقة (دعم/برودكاست/حظر)"""
-    context.user_data.pop("support_action", None)
+    """إلغاء أي عملية معلّقة (برودكاست/حظر من جانب الأدمن)"""
     context.user_data.pop("admin_action", None)
     await update.message.reply_text("✅ <b>تم الإلغاء.</b>", parse_mode="HTML")
 
@@ -96,28 +96,23 @@ def main():
 
     # ===== معالج نصوص موحّد =====
     async def on_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # 1. المستخدم وسط كتابة رسالة دعم؟
-        if context.user_data.get("support_action"):
-            await _forward_support_message(update, context)
-            return
-
-        # 2. ضغطة على زر من القائمة الثابتة؟
+        # 1. ضغطة على زر من القائمة الثابتة؟
         if await menu.is_menu_button(update):
             await menu.handle_menu_button(update, context)
             return
 
-        # 3. الأدمن وسط عملية (برودكاست/حظر)؟
+        # 2. الأدمن وسط عملية (برودكاست/حظر)؟
         pending_action = context.user_data.get("admin_action")
         if pending_action and await admin_dashboard.is_admin_check(update):
             await admin_dashboard.on_admin_text_input(update, context)
             return
 
-        # 4. التحقق من Force Subscribe
+        # 3. التحقق من Force Subscribe
         if not await force_subscribe.check_subscription(update, context):
             await force_subscribe.send_subscribe_message(update, context)
             return
 
-        # 5. معالجة كرابط فيديو عادي
+        # 4. معالجة كرابط فيديو عادي
         await download.on_message(update, context)
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text_message))
@@ -128,32 +123,6 @@ def main():
 
     logger.info("✅ البوت شغال دلوقتي...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-
-async def _forward_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """تحويل رسالة التواصل مع المطور للأونر مباشرة"""
-    context.user_data.pop("support_action", None)
-    user = update.effective_user
-    text = update.message.text
-
-    try:
-        await context.bot.send_message(
-            chat_id=config.OWNER_ID,
-            text=(
-                f"📨 رسالة جديدة (تواصل مع المطور)\n\n"
-                f"من: {user.first_name or ''} (@{user.username or '—'})\n"
-                f"آيدي: {user.id}\n\n"
-                f"الرسالة:\n{text}"
-            ),
-        )
-        await update.message.reply_text(
-            "✅ <b>تم إرسال رسالتك للمطور.</b>\n\nهيتم الرد عليك قريبًا.", parse_mode="HTML"
-        )
-    except Exception as e:
-        logger.error(f"فشل تحويل الرسالة للمطور: {e}")
-        await update.message.reply_text(
-            "❌ <b>حصل خطأ أثناء إرسال رسالتك.</b>\n\nحاول تاني.", parse_mode="HTML"
-        )
 
 
 if __name__ == "__main__":

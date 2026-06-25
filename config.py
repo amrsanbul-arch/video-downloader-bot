@@ -36,6 +36,13 @@ class Config:
     # ضع اسم القناة بدون @ (مثل: channel_name)
     FORCE_SUBSCRIBE_CHANNEL: str = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "")
 
+    # ===== اسم البوت (يظهر في رسائل "تواصل مع المطور" لتمييزه لو عندك أكتر من بوت) =====
+    BOT_DISPLAY_NAME: str = os.getenv("BOT_DISPLAY_NAME", "بوت تحميل الفيديوهات")
+
+    # ===== يوزر المطور على تليجرام (بدون @) =====
+    # زرار "تواصل مع المطور" هيفتح شات مباشر مع هذا اليوزر
+    OWNER_USERNAME: str = os.getenv("OWNER_USERNAME", "")
+
     # ===== اللغة =====
     DEFAULT_LANGUAGE: str = os.getenv("DEFAULT_LANGUAGE", "ar")
 
@@ -68,5 +75,13 @@ class Config:
         os.makedirs("logs", exist_ok=True)
         os.makedirs(os.path.dirname(cls.DATABASE_PATH) or ".", exist_ok=True)
 
+        # تحذير (وليس خطأ يوقف البوت) لو ملف الكوكيز محدد بس غير موجود فعليًا
+        if cls.COOKIES_FILE and not os.path.exists(cls.COOKIES_FILE):
+            print(
+                f"⚠️ تحذير: ملف الكوكيز '{cls.COOKIES_FILE}' محدد في .env "
+                f"لكنه غير موجود في المسار. التحميل من مواقع تتطلب تسجيل دخول سيفشل."
+            )
+
 
 config = Config()
+
