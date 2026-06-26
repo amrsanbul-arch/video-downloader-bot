@@ -1,3 +1,9 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# one_time_menu.sh
+set -e
+echo "🔧 تطبيق قائمة تختفي تلقائيًا بعد الاستخدام..."
+
+cat > handlers/menu.py << 'ZEOF_MARKER_UNIQUE'
 """
 handlers/menu.py
 قائمة أزرار ثابتة (Reply Keyboard) موسّعة بميزات إضافية:
@@ -294,3 +300,17 @@ async def _show_my_info(update: Update, lang: str, user_id: int):
 
     await update.message.reply_text(text, parse_mode="HTML")
 
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث handlers/menu.py"
+
+echo "🔍 فحص الأكواد..."
+python -m py_compile handlers/menu.py
+
+echo ""
+echo "✅✅✅ تم بنجاح! ✅✅✅"
+echo ""
+echo "الخطوة الجاية:"
+echo "  git add ."
+echo "  git commit -m 'Menu hides after use, reopens via keyboard icon'"
+echo "  git push"
+echo "  bash run.sh"
