@@ -23,7 +23,7 @@ from database.models import db
 from utils.logger import logger
 
 from handlers import start, help as help_handler, settings, admin, download
-from handlers import admin_dashboard, force_subscribe, menu
+from handlers import admin_dashboard, force_subscribe, menu, cookies, status
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -93,6 +93,17 @@ def main():
 
     # ===== الجودة الافتراضية =====
     app.add_handler(CallbackQueryHandler(menu.on_quality_callback, pattern="^setq_"))
+
+    # ===== إدارة الكوكيز (أدمن) =====
+    app.add_handler(CommandHandler("check_cookies", cookies.cmd_check_cookies))
+    app.add_handler(CommandHandler("update_cookies", cookies.cmd_update_cookies))
+    app.add_handler(
+        CallbackQueryHandler(cookies.on_cookie_site_callback, pattern="^cksite_")
+    )
+    app.add_handler(MessageHandler(filters.Document.ALL, cookies.on_cookie_document))
+
+    # ===== حالة البوت (أونر فقط) =====
+    app.add_handler(CommandHandler("status", status.cmd_status))
 
     # ===== معالج نصوص موحّد =====
     async def on_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):

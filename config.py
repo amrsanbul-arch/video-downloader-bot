@@ -32,6 +32,11 @@ class Config:
     # ===== Cookies (لمواقع تطلب تسجيل دخول مثل Reddit/Instagram/TikTok أحيانًا) =====
     COOKIES_FILE: str = os.getenv("COOKIES_FILE", "")
 
+    # ===== نظام كوكيز متعدد المنصات (جديد) =====
+    # مجلد فيه ملف كوكيز مستقل لكل منصة: cookies/youtube.txt, cookies/instagram.txt, إلخ
+    # لو ملف المنصة غير موجود، يتم الرجوع لـ COOKIES_FILE أعلاه كـ fallback
+    COOKIES_DIR: str = os.getenv("COOKIES_DIR", "cookies")
+
     # ===== Force Subscribe (اختياري) =====
     # ضع اسم القناة بدون @ (مثل: channel_name)
     FORCE_SUBSCRIBE_CHANNEL: str = os.getenv("FORCE_SUBSCRIBE_CHANNEL", "")
@@ -46,9 +51,18 @@ class Config:
     # ===== اللغة =====
     DEFAULT_LANGUAGE: str = os.getenv("DEFAULT_LANGUAGE", "ar")
 
-    # ===== Rate Limit =====
+    # ===== Rate Limit (عام لكل الرسائل) =====
     RATE_LIMIT_MESSAGES: int = int(os.getenv("RATE_LIMIT_MESSAGES", "5"))
     RATE_LIMIT_SECONDS: int = int(os.getenv("RATE_LIMIT_SECONDS", "10"))
+
+    # ===== Rate Limit خاص بالتحميلات فقط (جديد) =====
+    # افتراضيًا: 5 تحميلات لكل مستخدم في الدقيقة
+    DOWNLOAD_RATE_LIMIT_COUNT: int = int(os.getenv("DOWNLOAD_RATE_LIMIT_COUNT", "5"))
+    DOWNLOAD_RATE_LIMIT_SECONDS: int = int(os.getenv("DOWNLOAD_RATE_LIMIT_SECONDS", "60"))
+
+    # ===== طابور التحميل (جديد) =====
+    # أقصى عدد تحميلات تشتغل في نفس الوقت فعليًا (الباقي ينتظر في الطابور)
+    MAX_CONCURRENT_DOWNLOADS: int = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "2"))
 
     # ===== المواقع المدعومة (لعرضها في /help و /about) =====
     SUPPORTED_SITES = [
@@ -73,6 +87,7 @@ class Config:
         # التأكد من وجود المجلدات المطلوبة
         os.makedirs(cls.DOWNLOAD_DIR, exist_ok=True)
         os.makedirs("logs", exist_ok=True)
+        os.makedirs(cls.COOKIES_DIR, exist_ok=True)
         os.makedirs(os.path.dirname(cls.DATABASE_PATH) or ".", exist_ok=True)
 
         # تحذير (وليس خطأ يوقف البوت) لو ملف الكوكيز محدد بس غير موجود فعليًا

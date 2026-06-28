@@ -10,10 +10,10 @@ from telegram.ext import ContextTypes
 
 from config import config
 from database.models import db
-from utils.logger import logger
+from utils.logger import logger, get_download_logger
 from utils.i18n import t
 from utils.validators import is_valid_url, detect_site, extract_first_url
-from utils.helpers import rate_limiter, format_duration
+from utils.helpers import rate_limiter, download_rate_limiter, format_duration
 from services.downloader import (
     get_video_info,
     get_quality_estimates,
@@ -22,7 +22,10 @@ from services.downloader import (
 )
 from services.audio import download_audio
 from services.thumbnail import download_thumbnail
+from utils.download_tracker import download_slot
 from handlers.menu import get_default_quality
+
+download_logger = get_download_logger()
 
 _pending_urls: dict[str, str] = {}
 
@@ -179,6 +182,14 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
 
+    # حد التحميلات لكل مستخدم (منفصل عن حد الرسائل العام)
+    if not download_rate_limiter.is_allowed(user_id):
+        await query.edit_message_text(
+            "⏳ <b>كثرت عليها شوية!</b>\n\nوصلت للحد المسموح من التحميلات، استنى دقيقة وحاول تاني.",
+            parse_mode="HTML",
+        )
+        return
+
     try:
         await query.edit_message_text(
             "✅ <b>تم استلام طلبك.</b>\n\nسأرسل الملف فور الانتهاء.",
@@ -189,43 +200,46 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     file_path = None
     try:
-        if action == "best":
-            file_path = await download_video(url, quality="custom")
-            await _send_with_size_check(query, context, file_path, is_video=True)
-            format_name = "Best"
+        async with download_slot():
+            if action == "best":
+                file_path = await download_video(url, quality="custom")
+                await _send_with_size_check(query, context, file_path, is_video=True)
+                format_name = "Best"
 
-        elif action.isdigit():
-            height = int(action)
-            file_path = await download_video(url, quality="custom", height=height)
-            await _send_with_size_check(query, context, file_path, is_video=True)
-            format_name = f"{height}p"
+            elif action.isdigit():
+                height = int(action)
+                file_path = await download_video(url, quality="custom", height=height)
+                await _send_with_size_check(query, context, file_path, is_video=True)
+                format_name = f"{height}p"
 
-        elif action == "audio":
-            file_path = await download_audio(url)
-            await _send_with_size_check(query, context, file_path, is_video=False)
-            format_name = "MP3"
+            elif action == "audio":
+                file_path = await download_audio(url)
+                await _send_with_size_check(query, context, file_path, is_video=False)
+                format_name = "MP3"
 
-        elif action == "thumb":
-            info = await get_video_info(url)
-            file_path = await download_thumbnail(info.get("thumbnail"))
-            with open(file_path, "rb") as f:
-                await context.bot.send_photo(chat_id=query.message.chat_id, photo=f)
-            format_name = "Thumbnail"
-        else:
-            format_name = action
+            elif action == "thumb":
+                info = await get_video_info(url)
+                file_path = await download_thumbnail(info.get("thumbnail"))
+                with open(file_path, "rb") as f:
+                    await context.bot.send_photo(chat_id=query.message.chat_id, photo=f)
+                format_name = "Thumbnail"
+            else:
+                format_name = action
 
         site = detect_site(url)
         await db.log_download(user_id, url, site, format_name, "success")
+        download_logger.info(f"نجح | user={user_id} | site={site} | format={format_name} | url={url}")
         _pending_urls.pop(short_id, None)
 
     except Exception as e:
         logger.error(f"فشل تنفيذ التحميل للرابط {url}: {e}")
+        site = detect_site(url)
+        download_logger.error(f"فشل | user={user_id} | site={site} | action={action} | url={url} | error={e}")
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text="❌ <b>حصل خطأ أثناء التحميل</b>\n\nحاول تاني أو جرب رابط مختلف.",
             parse_mode="HTML",
         )
-        site = detect_site(url)
         await db.log_download(user_id, url, site, action, "failed")
 
     finally:
@@ -238,6 +252,10 @@ async def _send_with_size_check(query, context, file_path: str, is_video: bool):
 
     size_mb = os.path.getsize(file_path) / (1024 * 1024)
     if size_mb > config.MAX_FILE_SIZE_MB:
+        download_logger.warning(
+            f"مرفوض (حجم كبير) | user={query.from_user.id} | size={size_mb:.0f}MB "
+            f"| limit={config.MAX_FILE_SIZE_MB}MB | file={file_path}"
+        )
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=(

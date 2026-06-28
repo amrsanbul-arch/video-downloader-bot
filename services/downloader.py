@@ -9,11 +9,12 @@ import asyncio
 import yt_dlp
 
 from config import config
+from utils.cookies_manager import get_cookie_path
 
 DOWNLOAD_DIR = config.DOWNLOAD_DIR
 
 
-def _build_ydl_opts(out_path: str, fmt: str = "best") -> dict:
+def _build_ydl_opts(out_path: str, fmt: str = "best", site: str = None) -> dict:
     """إعدادات yt-dlp الأساسية المشتركة"""
     opts = {
         "outtmpl": out_path,
@@ -24,12 +25,13 @@ def _build_ydl_opts(out_path: str, fmt: str = "best") -> dict:
         "merge_output_format": "mp4",
         "socket_timeout": config.DOWNLOAD_TIMEOUT,
     }
-    if config.COOKIES_FILE:
-        opts["cookiefile"] = config.COOKIES_FILE
+    cookie_path = get_cookie_path(site) if site else (config.COOKIES_FILE or None)
+    if cookie_path:
+        opts["cookiefile"] = cookie_path
     return opts
 
 
-def _extract_info_sync(url: str) -> dict:
+def _extract_info_sync(url: str, site: str = None) -> dict:
     """استخراج معلومات الفيديو بدون تحميل (تشغيل sync داخل thread)"""
     opts = {
         "quiet": True,
@@ -37,8 +39,9 @@ def _extract_info_sync(url: str) -> dict:
         "noplaylist": True,
         "skip_download": True,
     }
-    if config.COOKIES_FILE:
-        opts["cookiefile"] = config.COOKIES_FILE
+    cookie_path = get_cookie_path(site) if site else (config.COOKIES_FILE or None)
+    if cookie_path:
+        opts["cookiefile"] = cookie_path
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
         return info
@@ -48,8 +51,11 @@ async def get_video_info(url: str) -> dict:
     """
     إرجاع معلومات الفيديو الأساسية: العنوان، المدة، الحجم التقريبي، الصورة المصغرة
     """
+    from utils.validators import detect_site  # استيراد محلي لتجنب أي حلقة استيراد
+
+    site = detect_site(url)
     loop = asyncio.get_event_loop()
-    info = await loop.run_in_executor(None, _extract_info_sync, url)
+    info = await loop.run_in_executor(None, _extract_info_sync, url, site)
 
     # تقدير الحجم لأعلى جودة متاحة
     filesize = info.get("filesize") or info.get("filesize_approx")
@@ -73,8 +79,8 @@ async def get_video_info(url: str) -> dict:
     }
 
 
-def _download_sync(url: str, out_path: str, fmt: str, height: int = None) -> str:
-    opts = _build_ydl_opts(out_path, fmt)
+def _download_sync(url: str, out_path: str, fmt: str, height: int = None, site: str = None) -> str:
+    opts = _build_ydl_opts(out_path, fmt, site)
     if height:
         opts["format"] = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
     with yt_dlp.YoutubeDL(opts) as ydl:
@@ -89,6 +95,9 @@ async def download_video(url: str, quality: str = "high", height: int = None) ->
     height: الارتفاع بالبكسل (480, 720, 1080, 2160)
     يرجع مسار الملف النهائي
     """
+    from utils.validators import detect_site
+
+    site = detect_site(url)
     file_id = uuid.uuid4().hex[:10]
     out_template = os.path.join(DOWNLOAD_DIR, f"{file_id}.%(ext)s")
 
@@ -103,7 +112,7 @@ async def download_video(url: str, quality: str = "high", height: int = None) ->
         fmt = "bestvideo[height<=1080]+bestaudio/best[height<=1080]/best"
 
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _download_sync, url, out_template, fmt, height)
+    await loop.run_in_executor(None, _download_sync, url, out_template, fmt, height, site)
 
     # تحديد المسار النهائي الحقيقي بعد التحميل (الامتداد قد يتغير)
     for f in os.listdir(DOWNLOAD_DIR):
@@ -117,8 +126,11 @@ async def get_quality_estimates(url: str) -> dict:
     """
     إرجاع قاموس {height: estimated_filesize_bytes} لكل جودة متاحة فعليًا للفيديو
     """
+    from utils.validators import detect_site
+
+    site = detect_site(url)
     loop = asyncio.get_event_loop()
-    info = await loop.run_in_executor(None, _extract_info_sync, url)
+    info = await loop.run_in_executor(None, _extract_info_sync, url, site)
 
     formats = info.get("formats", [])
     estimates: dict[int, int] = {}

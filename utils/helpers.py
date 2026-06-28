@@ -57,3 +57,11 @@ class RateLimiter:
 
 
 rate_limiter = RateLimiter()
+
+# Rate limiter مستقل خاص بالتحميلات فقط (افتراضيًا: 5 تحميلات/دقيقة لكل مستخدم)
+# مستقل عن rate_limiter العام أعلاه (اللي بيحكم كل الرسائل النصية)
+download_rate_limiter = RateLimiter(
+    max_messages=config.DOWNLOAD_RATE_LIMIT_COUNT,
+    window_seconds=config.DOWNLOAD_RATE_LIMIT_SECONDS,
+)
+

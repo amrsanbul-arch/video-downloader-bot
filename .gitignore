@@ -1,4 +1,8 @@
 .env
+cookies.txt
+*.cookies.txt
+cookies/*.txt
+!cookies/.gitkeep
 __pycache__/
 *.pyc
 *.pyo
@@ -11,3 +15,4 @@ logs/*.log
 venv/
 *.log
 .DS_Store
+
