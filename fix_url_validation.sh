@@ -1,3 +1,9 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# fix_url_validation.sh
+set -e
+echo "🔧 إصلاح فحص الروابط (دعم النطاقات الفرعية المتعددة مثل vt.tiktok.com)..."
+
+cat > utils/validators.py << 'ZEOF_MARKER_UNIQUE'
 """
 utils/validators.py
 دوال مساعدة للتحقق من صحة الروابط ونوع الموقع
@@ -44,3 +50,30 @@ def extract_first_url(text: str) -> str | None:
     match = re.search(r"https?://\S+", text)
     return match.group(0) if match else None
 
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث utils/validators.py"
+
+echo "🔍 فحص الأكواد..."
+python -m py_compile utils/validators.py
+
+echo "🧪 اختبار روابط حقيقية..."
+python3 -c "
+from utils.validators import is_valid_url, detect_site
+tests = [
+    'https://vt.tiktok.com/ZSCDgV3K1/',
+    'https://vm.tiktok.com/ZMabc123/',
+    'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+    'https://www.instagram.com/reel/abc/',
+]
+for u in tests:
+    print(is_valid_url(u), detect_site(u), u)
+"
+
+echo ""
+echo "✅✅✅ تم بنجاح! ✅✅✅"
+echo ""
+echo "الخطوة الجاية:"
+echo "  git add ."
+echo "  git commit -m 'Fix URL validation regex to support multi-level subdomains'"
+echo "  git push"
+echo "  bash run.sh"
