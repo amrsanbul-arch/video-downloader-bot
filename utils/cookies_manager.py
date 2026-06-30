@@ -7,6 +7,7 @@ utils/cookies_manager.py
 """
 
 import os
+import platform
 import time
 
 from config import config
@@ -27,10 +28,35 @@ PLATFORM_FILES = {
 }
 
 
+def _is_termux() -> bool:
+    """التحقق إذا كان البوت شغال داخل Termux (Android) - لتعطيل ميزات سطح المكتب فقط"""
+    return "ANDROID_ROOT" in os.environ or "com.termux" in os.environ.get("PREFIX", "")
+
+
+def get_browser_cookies_option() -> tuple | None:
+    """
+    يرجع خيار yt-dlp لاستخراج الكوكيز من متصفح سطح المكتب (مثل Chrome)،
+    أو None لو شغالين على Termux/Android (غير مدعوم أصلاً على الموبايل) أو لو معطّل في .env
+
+    يُستخدم كأولوية ثالثة (آخر حل) بعد ملف المنصة المخصص وملف COOKIES_FILE العام
+    """
+    if not config.BROWSER_COOKIES_BROWSER:
+        return None
+
+    if _is_termux():
+        # --cookies-from-browser غير مدعوم على Termux (لا يوجد متصفح حقيقي بنفس صيغة سطح المكتب)
+        return None
+
+    # yt-dlp يقبل هذا كـ tuple: (browser_name,)
+    return (config.BROWSER_COOKIES_BROWSER,)
+
+
 def get_cookie_path(site: str) -> str | None:
     """
     إرجاع مسار ملف الكوكيز الخاص بالمنصة لو موجود فعليًا،
     أو COOKIES_FILE القديم كـ fallback، أو None لو لا يوجد أي منهما
+
+    ملحوظة: لا يشمل browser cookies (تلك حالة خاصة تُدار في get_ydl_cookie_opts)
     """
     filename = PLATFORM_FILES.get(site)
     if filename:
@@ -43,6 +69,32 @@ def get_cookie_path(site: str) -> str | None:
         return config.COOKIES_FILE
 
     return None
+
+
+def get_ydl_cookie_opts(site: str) -> dict:
+    """
+    بناء قاموس خيارات yt-dlp الخاص بالكوكيز فقط، بترتيب أولوية واضح:
+    1) ملف كوكيز المنصة المخصص (cookies/youtube.txt مثلاً)
+    2) ملف COOKIES_FILE العام كـ fallback
+    3) browser cookies (سطح المكتب فقط، يتم تجاهله تلقائيًا على Termux)
+    4) بدون كوكيز خالص (تحميل عام بدون تسجيل دخول)
+
+    لا يرفع أي استثناء أبدًا - أسوأ حالة هي إرجاع dict فاضي (تحميل بدون كوكيز)
+    """
+    try:
+        cookie_path = get_cookie_path(site)
+        if cookie_path:
+            return {"cookiefile": cookie_path}
+
+        browser_option = get_browser_cookies_option()
+        if browser_option:
+            logger.info(f"لا يوجد ملف كوكيز لـ {site}، استخدام كوكيز المتصفح كـ fallback")
+            return {"cookiesfrombrowser": browser_option}
+
+    except Exception as e:
+        logger.warning(f"خطأ غير متوقع أثناء تحديد كوكيز {site}، سيتم التحميل بدون كوكيز: {e}")
+
+    return {}
 
 
 def get_cookie_path_for_url(url: str) -> str | None:

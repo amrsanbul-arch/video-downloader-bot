@@ -9,7 +9,7 @@ import asyncio
 import yt_dlp
 
 from config import config
-from utils.cookies_manager import get_cookie_path
+from utils.cookies_manager import get_ydl_cookie_opts
 
 DOWNLOAD_DIR = config.DOWNLOAD_DIR
 
@@ -30,9 +30,10 @@ def _download_audio_sync(url: str, out_template: str, site: str = None) -> None:
             }
         ],
     }
-    cookie_path = get_cookie_path(site) if site else (config.COOKIES_FILE or None)
-    if cookie_path:
-        opts["cookiefile"] = cookie_path
+    if site:
+        opts.update(get_ydl_cookie_opts(site))
+    if config.PROXY_URL:
+        opts["proxy"] = config.PROXY_URL
     with yt_dlp.YoutubeDL(opts) as ydl:
         ydl.download([url])
 

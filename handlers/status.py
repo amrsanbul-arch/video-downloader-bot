@@ -13,8 +13,14 @@ from config import config
 from database.models import db
 from utils.cookies_manager import check_all_platforms
 from utils.download_tracker import get_status as get_queue_status
+from services.video_cache import get_cache_size
 
 _start_time = time.time()
+
+
+def get_start_time() -> float:
+    """وقت بدء تشغيل البوت (Unix timestamp) - يُستخدم في /status و /health"""
+    return _start_time
 
 
 def _format_uptime(seconds: float) -> str:
@@ -77,6 +83,11 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     uptime = _format_uptime(time.time() - _start_time)
 
+    try:
+        cache_size = get_cache_size()
+    except Exception:
+        cache_size = "—"
+
     text = (
         "📡 <b>حالة البوت</b>\n\n"
         f"• الحالة: ✅ شغال\n"
@@ -86,7 +97,8 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• التحميلات: {downloads_count}\n\n"
         f"🍪 <b>الكوكيز:</b> {cookies_summary}\n\n"
         f"💾 <b>التخزين:</b>\n{disk_line}\n\n"
-        f"📥 <b>طابور التحميل:</b>\n{queue_line}"
+        f"📥 <b>طابور التحميل:</b>\n{queue_line}\n\n"
+        f"🧠 <b>الكاش:</b> {cache_size} فيديو مخزّن مؤقتًا"
     )
 
     await update.message.reply_text(text, parse_mode="HTML")

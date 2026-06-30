@@ -22,14 +22,25 @@ from services.downloader import (
 )
 from services.audio import download_audio
 from services.thumbnail import download_thumbnail
-from utils.download_tracker import download_slot
+from utils.download_tracker import user_download_slot, get_active_file_paths
+from services.video_cache import get_cached, set_cached
 from handlers.menu import get_default_quality
 
 download_logger = get_download_logger()
 
 _pending_urls: dict[str, str] = {}
+# مسارات الملفات الجاري رفعها حاليًا (حماية إضافية من حذفها بواسطة cleanup التلقائي)
+_locally_active_files: set[str] = set()
 
 QUALITY_GRID = [144, 240, 360, 480, 720, 1080]
+
+
+def _mark_file_active(path: str):
+    _locally_active_files.add(path)
+
+
+def _unmark_file_active(path: str):
+    _locally_active_files.discard(path)
 
 
 async def get_lang(user_id: int) -> str:
@@ -127,23 +138,32 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     status_msg = await update.message.reply_text("🔍 <b>جاري التحليل...</b>", parse_mode="HTML")
 
-    try:
-        info = await get_video_info(url)
-        estimates = await get_quality_estimates(url)
-    except Exception as e:
-        logger.error(f"فشل تحليل الرابط {url}: {e}")
-        err_text = str(e).lower()
-        if "login" in err_text or "authentication" in err_text or "cookies" in err_text:
-            await status_msg.edit_text(
-                "🔒 <b>هذا الفيديو يحتاج تسجيل دخول</b>\n\nالموقع طلب Cookies.",
-                parse_mode="HTML",
-            )
-        else:
-            await status_msg.edit_text(
-                "❌ <b>تعذر تحليل هذا الرابط</b>\n\nتأكد إن الموقع مدعوم.",
-                parse_mode="HTML",
-            )
-        return
+    # محاولة القراءة من الكاش أولاً (يقلل طلبات yt-dlp المتكررة لنفس الرابط)
+    cached = get_cached(url)
+    if cached:
+        info = cached["info"]
+        estimates = cached["estimates"]
+    else:
+        try:
+            info = await get_video_info(url)
+            estimates = await get_quality_estimates(url)
+            set_cached(url, info, estimates)
+        except Exception as e:
+            logger.error(f"فشل تحليل الرابط {url}: {e}")
+            err_text = str(e).lower()
+            if "login" in err_text or "authentication" in err_text or "cookies" in err_text:
+                await status_msg.edit_text(
+                    "🔒 <b>هذا الفيديو يحتاج تسجيل دخول</b>\n\n"
+                    "الموقع طلب Cookies، وممكن تكون الكوكيز المحفوظة قديمة أو منتهية.\n"
+                    "جرب تحدّثها عبر /update_cookies (إذا كنت أدمن) أو حاول رابط مختلف.",
+                    parse_mode="HTML",
+                )
+            else:
+                await status_msg.edit_text(
+                    "❌ <b>تعذر تحليل هذا الرابط</b>\n\nتأكد إن الموقع مدعوم.",
+                    parse_mode="HTML",
+                )
+            return
 
     short_id = uuid.uuid4().hex[:8]
     _pending_urls[short_id] = url
@@ -200,26 +220,30 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     file_path = None
     try:
-        async with download_slot():
+        async with user_download_slot(user_id):
             if action == "best":
                 file_path = await download_video(url, quality="custom")
+                _mark_file_active(file_path)
                 await _send_with_size_check(query, context, file_path, is_video=True)
                 format_name = "Best"
 
             elif action.isdigit():
                 height = int(action)
                 file_path = await download_video(url, quality="custom", height=height)
+                _mark_file_active(file_path)
                 await _send_with_size_check(query, context, file_path, is_video=True)
                 format_name = f"{height}p"
 
             elif action == "audio":
                 file_path = await download_audio(url)
+                _mark_file_active(file_path)
                 await _send_with_size_check(query, context, file_path, is_video=False)
                 format_name = "MP3"
 
             elif action == "thumb":
                 info = await get_video_info(url)
                 file_path = await download_thumbnail(info.get("thumbnail"))
+                _mark_file_active(file_path)
                 with open(file_path, "rb") as f:
                     await context.bot.send_photo(
                         chat_id=query.message.chat_id,
@@ -250,6 +274,7 @@ async def on_download_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     finally:
         if file_path:
+            _unmark_file_active(file_path)
             cleanup_file(file_path)
 
 

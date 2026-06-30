@@ -20,10 +20,13 @@ from telegram.ext import (
 
 from config import config
 from database.models import db
-from utils.logger import logger
+from utils.logger import logger, log_startup
 
 from handlers import start, help as help_handler, settings, admin, download
-from handlers import admin_dashboard, force_subscribe, menu, cookies, status
+from handlers import admin_dashboard, force_subscribe, menu, cookies, status, maintenance
+from services.cleanup_service import cleanup_job
+from services.backup_service import backup_job
+from services.video_cache import cleanup_cache_job
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
@@ -33,6 +36,7 @@ async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE):
 async def post_init(application: Application):
     await db.connect()
     logger.info("✅ تم الاتصال بقاعدة البيانات بنجاح")
+    log_startup(f"البوت بدأ التشغيل بنجاح | الإصدار: 3.0 | PID: {__import__('os').getpid()}")
 
 
 async def post_shutdown(application: Application):
@@ -105,6 +109,13 @@ def main():
     # ===== حالة البوت (أونر فقط) =====
     app.add_handler(CommandHandler("status", status.cmd_status))
 
+    # ===== أوامر الصيانة الجديدة (أدمن) =====
+    app.add_handler(CommandHandler("health", maintenance.cmd_health))
+    app.add_handler(CommandHandler("cleanup", maintenance.cmd_cleanup))
+    app.add_handler(CommandHandler("backup", maintenance.cmd_backup))
+    # ملحوظة: أمر /stats الموجود (settings.cmd_stats) هو إحصائيات المستخدم الشخصية.
+    # لا نغيّره حفاظًا على التوافق العكسي - الإحصائيات الإدارية الشاملة متاحة عبر /botstats الموجود مسبقًا.
+
     # ===== معالج نصوص موحّد =====
     async def on_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 1. ضغطة على زر من القائمة الثابتة؟
@@ -131,6 +142,36 @@ def main():
 
     # ===== معالجة الأخطاء =====
     app.add_error_handler(on_error)
+
+    # ===== الوظائف الدورية (Job Queue) =====
+    # ملحوظة: job_queue يتطلب تثبيت: pip install "python-telegram-bot[job-queue]"
+    # في حالة عدم توفره، نتجاهل الجدولة الدورية بدون كسر تشغيل البوت (الأوامر اليدوية /cleanup و /backup تبقى تعمل)
+    if app.job_queue is not None:
+        app.job_queue.run_repeating(
+            cleanup_job,
+            interval=config.CLEANUP_INTERVAL_MINUTES * 60,
+            first=60,
+            name="auto_cleanup_downloads",
+        )
+        app.job_queue.run_repeating(
+            backup_job,
+            interval=config.BACKUP_INTERVAL_HOURS * 3600,
+            first=300,
+            name="auto_database_backup",
+        )
+        app.job_queue.run_repeating(
+            cleanup_cache_job,
+            interval=config.VIDEO_CACHE_TTL_SECONDS,
+            first=config.VIDEO_CACHE_TTL_SECONDS,
+            name="auto_cleanup_video_cache",
+        )
+        logger.info("✅ تم تفعيل الوظائف الدورية (تنظيف، نسخ احتياطي، كاش)")
+    else:
+        logger.warning(
+            "⚠️ job_queue غير متاح - الوظائف الدورية معطّلة. "
+            "ثبّت: pip install \"python-telegram-bot[job-queue]\" لتفعيلها. "
+            "الأوامر اليدوية /cleanup و /backup تعمل بشكل طبيعي."
+        )
 
     logger.info("✅ البوت شغال دلوقتي...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

@@ -9,9 +9,22 @@ import asyncio
 import yt_dlp
 
 from config import config
-from utils.cookies_manager import get_cookie_path
+from utils.cookies_manager import get_ydl_cookie_opts
 
 DOWNLOAD_DIR = config.DOWNLOAD_DIR
+
+
+def _apply_common_opts(opts: dict, site: str = None) -> dict:
+    """
+    إضافة الخيارات المشتركة (كوكيز + بروكسي) لأي قاموس خيارات yt-dlp
+    - الكوكيز: عبر منطق fallback ثلاثي الأولوية في cookies_manager
+    - البروكسي: يُضاف فقط لو PROXY_URL محدد في .env (يدعم HTTP/HTTPS/SOCKS5)
+    """
+    if site:
+        opts.update(get_ydl_cookie_opts(site))
+    if config.PROXY_URL:
+        opts["proxy"] = config.PROXY_URL
+    return opts
 
 
 def _build_ydl_opts(out_path: str, fmt: str = "best", site: str = None) -> dict:
@@ -25,10 +38,7 @@ def _build_ydl_opts(out_path: str, fmt: str = "best", site: str = None) -> dict:
         "merge_output_format": "mp4",
         "socket_timeout": config.DOWNLOAD_TIMEOUT,
     }
-    cookie_path = get_cookie_path(site) if site else (config.COOKIES_FILE or None)
-    if cookie_path:
-        opts["cookiefile"] = cookie_path
-    return opts
+    return _apply_common_opts(opts, site)
 
 
 def _extract_info_sync(url: str, site: str = None) -> dict:
@@ -39,9 +49,7 @@ def _extract_info_sync(url: str, site: str = None) -> dict:
         "noplaylist": True,
         "skip_download": True,
     }
-    cookie_path = get_cookie_path(site) if site else (config.COOKIES_FILE or None)
-    if cookie_path:
-        opts["cookiefile"] = cookie_path
+    opts = _apply_common_opts(opts, site)
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
         return info

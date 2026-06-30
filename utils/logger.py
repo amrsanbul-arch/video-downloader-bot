@@ -24,10 +24,10 @@ def setup_logger(name: str = "video_bot") -> logging.Logger:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    # كتابة في ملف، مع تدوير الملف عند الوصول لـ 5MB (حتى 5 نسخ احتياطية)
+    # كتابة في ملف، مع تدوير الملف عند الوصول لـ 10MB (حتى 5 نسخ احتياطية)
     file_handler = RotatingFileHandler(
         os.path.join(LOG_DIR, "bot.log"),
-        maxBytes=5 * 1024 * 1024,
+        maxBytes=10 * 1024 * 1024,
         backupCount=5,
         encoding="utf-8",
     )
@@ -61,7 +61,7 @@ def _setup_dedicated_logger(name: str, filename: str, level: int = logging.INFO)
 
     file_handler = RotatingFileHandler(
         os.path.join(LOG_DIR, filename),
-        maxBytes=5 * 1024 * 1024,
+        maxBytes=10 * 1024 * 1024,
         backupCount=5,
         encoding="utf-8",
     )
@@ -80,6 +80,9 @@ logger = setup_logger()
 # لوجرز إضافية مخصصة - يُستخدمان بجانب logger الأساسي وليس بدلاً منه
 error_logger = _setup_dedicated_logger("error", "error.log", level=logging.ERROR)
 download_logger = _setup_dedicated_logger("download", "download.log", level=logging.INFO)
+admin_logger = _setup_dedicated_logger("admin", "admin.log", level=logging.INFO)
+startup_logger = _setup_dedicated_logger("startup", "startup.log", level=logging.INFO)
+cleanup_logger = _setup_dedicated_logger("cleanup", "cleanup.log", level=logging.INFO)
 
 
 def log_error(message: str, exc: Exception = None):
@@ -101,6 +104,33 @@ def log_download(message: str):
         pass
 
 
+def log_admin_action(message: str):
+    """تسجيل أي إجراء إداري (حظر، برودكاست، نسخ احتياطي، تنظيف يدوي...) في logs/admin.log"""
+    try:
+        logger.info(f"[ADMIN] {message}")
+        admin_logger.info(message)
+    except Exception:
+        pass
+
+
+def log_startup(message: str):
+    """تسجيل أحداث بدء التشغيل في logs/startup.log"""
+    try:
+        logger.info(message)
+        startup_logger.info(message)
+    except Exception:
+        pass
+
+
+def log_cleanup(message: str):
+    """تسجيل عمليات تنظيف الملفات/الكاش في logs/cleanup.log"""
+    try:
+        logger.info(message)
+        cleanup_logger.info(message)
+    except Exception:
+        pass
+
+
 def get_error_logger() -> logging.Logger:
     """إرجاع لوجر logs/error.log مباشرة (يُستخدم في الموديولز التي تفضّل استدعاء logger.error مباشرة)"""
     return error_logger
@@ -109,4 +139,9 @@ def get_error_logger() -> logging.Logger:
 def get_download_logger() -> logging.Logger:
     """إرجاع لوجر logs/download.log مباشرة"""
     return download_logger
+
+
+def get_admin_logger() -> logging.Logger:
+    """إرجاع لوجر logs/admin.log مباشرة"""
+    return admin_logger
 
