@@ -1,3 +1,9 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# add_dev_commands_to_bottom_menu.sh
+set -e
+echo "🔧 إضافة زرار أوامر المطور للقائمة السفلية الثابتة..."
+
+cat > handlers/menu.py << 'ZEOF_MARKER_UNIQUE'
 """
 handlers/menu.py
 قائمة أزرار ثابتة (Reply Keyboard) موسّعة بميزات إضافية:
@@ -307,3 +313,19 @@ async def _show_my_info(update: Update, lang: str, user_id: int):
 
     await update.message.reply_text(text, parse_mode="HTML")
 
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث handlers/menu.py"
+
+echo "🔍 فحص الأكواد..."
+python -m py_compile handlers/menu.py handlers/admin_dashboard.py
+
+echo ""
+echo "✅✅✅ تم بنجاح! ✅✅✅"
+echo ""
+echo "ابعت /start تاني عشان القائمة السفلية تتحدث، هتشوف زرار \"أوامر المطور\" جنب \"لوحة التحكم\" (لو إنت أدمن)"
+echo ""
+echo "الخطوة الجاية:"
+echo "  git add ."
+echo "  git commit -m 'Add developer commands button to bottom persistent menu'"
+echo "  git push"
+echo "  bash run.sh"
