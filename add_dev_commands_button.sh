@@ -1,3 +1,9 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# add_dev_commands_button.sh
+set -e
+echo "🔧 إضافة زرار أوامر المطور في لوحة الإدارة..."
+
+cat > handlers/admin_dashboard.py << 'ZEOF_MARKER_UNIQUE'
 """
 handlers/admin_dashboard.py
 لوحة إدارة احترافية بأزرار تفاعلية (Dashboard بدل أوامر نصية)
@@ -284,3 +290,19 @@ async def on_admin_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text("⚠️ <b>آيدي غير صحيح.</b>", parse_mode="HTML")
         context.user_data.pop("admin_action", None)
 
+ZEOF_MARKER_UNIQUE
+echo "✅ تم تحديث handlers/admin_dashboard.py"
+
+echo "🔍 فحص الأكواد..."
+python -m py_compile handlers/admin_dashboard.py
+
+echo ""
+echo "✅✅✅ تم بنجاح! ✅✅✅"
+echo ""
+echo "جرب: /admin ثم دوس على زرار \"👨‍💻 أوامر المطور\""
+echo ""
+echo "الخطوة الجاية:"
+echo "  git add ."
+echo "  git commit -m 'Add developer commands button to admin dashboard'"
+echo "  git push"
+echo "  bash run.sh"
